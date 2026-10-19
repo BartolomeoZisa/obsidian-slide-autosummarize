@@ -6,7 +6,8 @@
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
 		"build": "tsc --noEmit --skipLibCheck && node esbuild.config.mjs production",
-		"version": "node version-bump.mjs"
+		"version": "node version-bump.mjs",
+		"lint": "eslint src"
 	},
 	"type": "module",
 	"keywords": [
@@ -19,12 +20,16 @@
 	],
 	"license": "GPL-3.0-or-later",
 	"devDependencies": {
+		"@eslint/js": "^9.39.5",
+		"@eslint/json": "^0.14.0",
 		"@types/node": "^20.0.0",
-		"builtin-modules": "^5.0.0",
 		"esbuild": "^0.28.2",
+		"eslint": "^9.39.5",
+		"eslint-plugin-obsidianmd": "^0.4.2",
 		"obsidian": "latest",
 		"tslib": "^2.6.0",
-		"typescript": "^5.0.0"
+		"typescript": "^5.0.0",
+		"typescript-eslint": "^8.71.2"
 	},
 	"dependencies": {
 		"pdfjs-dist": "^4.2.67"

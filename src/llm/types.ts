@@ -85,29 +85,84 @@ export interface LLMProvider {
 	): Promise<string>;
 }
 
-/** Shared fetch helper with timeout + clean error messages. */
-export async function fetchWithTimeout(
+import { requestUrl } from "obsidian";
+
+/** Normalized response so callers stay independent of the transport. */
+export interface HttpResponse {
+	status: number;
+	ok: boolean;
+	headers: Record<string, string>;
+	text(): Promise<string>;
+	json(): Promise<unknown>;
+}
+
+function headersToRecord(headers: HeadersInit | undefined): Record<string, string> {
+	const out: Record<string, string> = {};
+	if (!headers) return out;
+	if (headers instanceof Headers) {
+		headers.forEach((value, key) => {
+			out[key] = value;
+		});
+	} else if (Array.isArray(headers)) {
+		for (const [key, value] of headers) out[key] = value;
+	} else {
+		for (const [key, value] of Object.entries(headers)) out[key] = value;
+	}
+	return out;
+}
+
+function headerValue(
+	headers: Record<string, string>,
+	name: string,
+): string | undefined {
+	const lower = name.toLowerCase();
+	for (const [key, value] of Object.entries(headers)) {
+		if (key.toLowerCase() === lower) return value;
+	}
+	return undefined;
+}
+
+/** Shared request helper with timeout + clean error messages. */
+export async function requestWithTimeout(
 	url: string,
 	init: RequestInit,
 	timeoutMs = 120_000,
-): Promise<Response> {
-	const ctrl = new AbortController();
-	const t = setTimeout(() => ctrl.abort(), timeoutMs);
+): Promise<HttpResponse> {
+	const request = requestUrl({
+		url,
+		method: init.method ?? "GET",
+		headers: headersToRecord(init.headers),
+		body: typeof init.body === "string" ? init.body : undefined,
+		throw: false,
+	});
+	// The request cannot be cancelled; swallow its late result if we time out.
+	request.catch(() => undefined);
+
+	let timer = 0;
 	try {
-		const res = await fetch(url, { ...init, signal: ctrl.signal });
-		return res;
-	} catch (e) {
-		if ((e as Error).name === "AbortError") {
-			throw new Error(`Request timed out after ${timeoutMs}ms: ${url}`);
-		}
-		throw e;
+		const res = await Promise.race([
+			request,
+			new Promise<never>((_, reject) => {
+				timer = window.setTimeout(
+					() => reject(new Error(`Request timed out after ${timeoutMs}ms: ${url}`)),
+					timeoutMs,
+				);
+			}),
+		]);
+		return {
+			status: res.status,
+			ok: res.status >= 200 && res.status < 300,
+			headers: res.headers,
+			text: () => Promise.resolve(res.text),
+			json: () => Promise.resolve(res.json as unknown),
+		};
 	} finally {
-		clearTimeout(t);
+		window.clearTimeout(timer);
 	}
 }
 
 export async function throwIfBad(
-	res: Response,
+	res: HttpResponse,
 	providerLabel: string,
 ): Promise<void> {
 	if (res.ok) return;
@@ -119,7 +174,7 @@ export async function throwIfBad(
 	}
 	const snippet = body.slice(0, 800);
 	throw new Error(
-		`${providerLabel} request failed (HTTP ${res.status}): ${snippet || res.statusText}`,
+		`${providerLabel} request failed (HTTP ${res.status}): ${snippet || "no response body"}`,
 	);
 }
 
@@ -129,9 +184,13 @@ function isTransientStatus(status: number): boolean {
 	);
 }
 
-function parseRetryAfterMs(res: Response, fallbackMs: number, maxMs: number): number {
+function parseRetryAfterMs(
+	res: HttpResponse,
+	fallbackMs: number,
+	maxMs: number,
+): number {
 	try {
-		const raw = res.headers?.get?.("retry-after");
+		const raw = headerValue(res.headers, "retry-after");
 		if (raw) {
 			const secs = Number(raw);
 			if (Number.isFinite(secs) && secs >= 0) {
@@ -149,7 +208,7 @@ function parseRetryAfterMs(res: Response, fallbackMs: number, maxMs: number): nu
 }
 
 function sleep(ms: number): Promise<void> {
-	return new Promise((resolve) => setTimeout(resolve, ms));
+	return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
 /**
@@ -166,7 +225,7 @@ export async function fetchWithRetry(
 	url: string,
 	init: RequestInit,
 	opts: RetryOptions = {},
-): Promise<Response> {
+): Promise<HttpResponse> {
 	const timeoutMs = opts.timeoutMs ?? 120_000;
 	const maxRetries = opts.maxRetries ?? 5;
 	const baseDelayMs = opts.baseDelayMs ?? 2000;
@@ -174,9 +233,9 @@ export async function fetchWithRetry(
 	const label = opts.providerLabel ?? "LLM";
 
 	for (let attempt = 0; ; attempt++) {
-		let res: Response;
+		let res: HttpResponse;
 		try {
-			res = await fetchWithTimeout(url, init, timeoutMs);
+			res = await requestWithTimeout(url, init, timeoutMs);
 		} catch (e) {
 			const reason = e instanceof Error ? e.message : String(e);
 			if (attempt >= maxRetries) {
@@ -207,7 +266,7 @@ export async function fetchWithRetry(
 				/* ignore */
 			}
 			throw new Error(
-				`${label} request failed after ${attempt + 1} attempt(s) (last HTTP ${res.status}): ${snippet || res.statusText}`,
+				`${label} request failed after ${attempt + 1} attempt(s) (last HTTP ${res.status}): ${snippet || "no response body"}`,
 			);
 		}
 		const backoff = baseDelayMs * 2 ** attempt + Math.random() * 1000;

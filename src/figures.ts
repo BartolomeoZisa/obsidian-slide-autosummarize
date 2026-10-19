@@ -124,13 +124,13 @@ export async function cropPng(pngBytes: Uint8Array, box: PixelBox): Promise<Uint
 	);
 	try {
 		const img = await loadImage(url);
-		const canvas = document.createElement("canvas");
+		const canvas = createEl("canvas");
 		canvas.width = w;
 		canvas.height = h;
 		const ctx = canvas.getContext("2d");
 		if (!ctx) throw new Error("Canvas 2D context unavailable");
 		ctx.drawImage(img, box.px1, box.py1, w, h, 0, 0, w, h);
-		const blob: Blob | null = await new Promise((resolve) =>
+		const blob = await new Promise<Blob | null>((resolve) =>
 			canvas.toBlob((b) => resolve(b), "image/png"),
 		);
 		if (!blob) throw new Error("canvas.toBlob returned null");

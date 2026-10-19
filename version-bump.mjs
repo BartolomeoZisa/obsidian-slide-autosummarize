@@ -1,4 +1,5 @@
 import { readFileSync, writeFileSync } from "fs";
+import { execFileSync } from "child_process";
 
 const targetVersion = process.env.npm_package_version;
 if (!targetVersion) {
@@ -18,5 +19,14 @@ writeFileSync("package.json", JSON.stringify(pkg, null, "\t") + "\n");
 const versions = JSON.parse(readFileSync("versions.json", "utf8"));
 versions[targetVersion] = minAppVersion;
 writeFileSync("versions.json", JSON.stringify(versions, null, "\t") + "\n");
+
+// npm only stages package.json; stage our files so they land in the same commit.
+try {
+	execFileSync("git", ["add", "manifest.json", "versions.json"], {
+		stdio: "ignore",
+	});
+} catch {
+	// Not a git checkout (e.g. a tarball): nothing to stage.
+}
 
 console.log(`version bumped to ${targetVersion} (minAppVersion ${minAppVersion})`);

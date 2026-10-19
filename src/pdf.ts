@@ -5,6 +5,10 @@
  *   text-only if rendering fails — e.g. worker unavailable).
  */
 
+import type { PDFDocumentProxy, PDFPageProxy } from "pdfjs-dist";
+
+type PdfjsModule = typeof import("pdfjs-dist");
+
 export interface ExtractedPage {
 	pageNumber: number;
 	text: string;
@@ -23,17 +27,21 @@ export interface ExtractOptions {
 	onProgress?: (done: number, total: number) => void;
 }
 
-async function loadPdfjs(): Promise<typeof import("pdfjs-dist")> {
+async function loadPdfjs(): Promise<PdfjsModule> {
 	// Lazy so a broken pdf.js install only fails when actually summarizing.
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	const pdfjs: any = await import("pdfjs-dist/legacy/build/pdf.mjs");
+	const pdfjs: PdfjsModule = await import(
+		"pdfjs-dist/legacy/build/pdf.mjs"
+	);
 
 	if (!pdfjs.GlobalWorkerOptions.workerSrc) {
 		// Worker is bundled as text inside main.js → Blob URL. Fully offline:
 		// no extra file to install and no remote code is ever downloaded.
-		const workerCode = (await import("pdfjs-dist/build/pdf.worker.min.mjs"))
-			.default as string;
-		const blob = new Blob([workerCode], { type: "text/javascript" });
+		const workerModule = await import(
+			"pdfjs-dist/build/pdf.worker.min.mjs"
+		);
+		const blob = new Blob([workerModule.default], {
+			type: "text/javascript",
+		});
 		pdfjs.GlobalWorkerOptions.workerSrc = URL.createObjectURL(blob);
 	}
 	return pdfjs;
@@ -47,11 +55,7 @@ export async function extractPdfSlides(
 	const renderImages = opts.renderImages ?? true;
 	const pdfjs = await loadPdfjs();
 
-	let pdf: {
-		numPages: number;
-		getPage(n: number): Promise<unknown>;
-		destroy(): Promise<void>;
-	};
+	let pdf: PDFDocumentProxy;
 	try {
 		pdf = await openDocument(pdfjs, data);
 	} catch (e) {
@@ -68,17 +72,12 @@ export async function extractPdfSlides(
 
 	const pages: ExtractedPage[] = [];
 	for (let n = 1; n <= totalRequested; n++) {
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		const page: any = await pdf.getPage(n);
+		const page: PDFPageProxy = await pdf.getPage(n);
 		let text = "";
 		try {
 			const tc = await page.getTextContent();
 			text = tc.items
-				.map((it: unknown) =>
-					typeof it === "object" && it !== null && "str" in it
-						? String((it as { str: unknown }).str)
-						: "",
-				)
+				.map((it) => ("str" in it ? it.str : ""))
 				.join(" ")
 				.replace(/\s+/g, " ")
 				.trim();
@@ -121,12 +120,10 @@ export async function extractPdfSlides(
 	return { pages, numPages: pdf.numPages };
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function openDocument(pdfjs: any, data: ArrayBuffer): Promise<{
-	numPages: number;
-	getPage(n: number): Promise<unknown>;
-	destroy(): Promise<void>;
-}> {
+function openDocument(
+	pdfjs: PdfjsModule,
+	data: ArrayBuffer,
+): Promise<PDFDocumentProxy> {
 	const loadingTask = pdfjs.getDocument({
 		data: new Uint8Array(data.slice(0)),
 		useWorkerFetch: false,
@@ -153,20 +150,19 @@ function workerHelp(): string {
 	return "The PDF engine's worker is bundled with the plugin; check the developer console (Ctrl+Shift+I) for the underlying error, and make sure Obsidian is not blocking Blob URLs.";
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function renderPageToPng(
-	page: any,
+	page: PDFPageProxy,
 	scale: number,
 ): Promise<{ bytes: Uint8Array; width: number; height: number }> {
 	const viewport = page.getViewport({ scale });
-	const canvas = document.createElement("canvas");
+	const canvas = createEl("canvas");
 	canvas.width = Math.floor(viewport.width);
 	canvas.height = Math.floor(viewport.height);
 	const ctx = canvas.getContext("2d");
 	if (!ctx) throw new Error("Canvas 2D context unavailable");
 	const renderTask = page.render({ canvasContext: ctx, viewport });
 	await renderTask.promise;
-	const blob: Blob | null = await new Promise((resolve) =>
+	const blob = await new Promise<Blob | null>((resolve) =>
 		canvas.toBlob((b) => resolve(b), "image/png"),
 	);
 	if (!blob) throw new Error("canvas.toBlob returned null");

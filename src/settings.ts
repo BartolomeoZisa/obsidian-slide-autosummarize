@@ -69,11 +69,9 @@ export class SlideAutosummarizeSettingTab extends PluginSettingTab {
 		const s: SummarizerSettings = this.plugin.settings;
 		const rerender = () => this.display();
 
-		containerEl.createEl("h2", { text: "Slide Autosummarize" });
-
 		new Setting(containerEl)
 			.setName("LLM provider")
-			.setDesc("Modular backend. Gemini first; Ollama runs fully local. New APIs plug in via src/llm/*.")
+			.setDesc("Modular backend. Gemini first; Ollama runs fully local. Add new providers as separate modules.")
 			.addDropdown((d) =>
 				d
 					.addOption("gemini", "Google Gemini")
@@ -89,15 +87,15 @@ export class SlideAutosummarizeSettingTab extends PluginSettingTab {
 					}),
 			);
 
-		containerEl.createEl("h3", { text: "Provider credentials & models" });
+		new Setting(containerEl).setName("Provider credentials & models").setHeading();
 
 		if (s.provider === "gemini") {
 			new Setting(containerEl)
 				.setName("Gemini API key")
-				.setDesc("From https://aistudio.google.com/apikey")
+				.setDesc("Create a key for the Gemini API.")
 				.addText((t) =>
 					t
-						.setPlaceholder("AIza…")
+						.setPlaceholder("Paste key…")
 						.setValue(s.geminiApiKey)
 						.onChange(async (v) => {
 							s.geminiApiKey = v.trim();
@@ -120,7 +118,7 @@ export class SlideAutosummarizeSettingTab extends PluginSettingTab {
 				.setName("OpenAI API key")
 				.addText((t) =>
 					t
-						.setPlaceholder("sk-…")
+						.setPlaceholder("Paste key…")
 						.setValue(s.openaiApiKey)
 						.onChange(async (v) => {
 							s.openaiApiKey = v.trim();
@@ -143,7 +141,7 @@ export class SlideAutosummarizeSettingTab extends PluginSettingTab {
 				.setName("Anthropic API key")
 				.addText((t) =>
 					t
-						.setPlaceholder("sk-ant-…")
+						.setPlaceholder("Paste key…")
 						.setValue(s.anthropicApiKey)
 						.onChange(async (v) => {
 							s.anthropicApiKey = v.trim();
@@ -164,7 +162,7 @@ export class SlideAutosummarizeSettingTab extends PluginSettingTab {
 		if (s.provider === "ollama") {
 			new Setting(containerEl)
 				.setName("Ollama base URL")
-				.setDesc("OpenAI-compatible endpoint, e.g. http://localhost:11434/v1")
+				.setDesc("OpenAI-compatible endpoint. The default local server address works as-is.")
 				.addText((t) =>
 					t.setValue(s.ollamaBaseUrl).onChange(async (v) => {
 						s.ollamaBaseUrl = v.trim();
@@ -210,7 +208,7 @@ export class SlideAutosummarizeSettingTab extends PluginSettingTab {
 			);
 		}
 
-		containerEl.createEl("h3", { text: "Pipeline" });
+		new Setting(containerEl).setName("Pipeline").setHeading();
 
 		new Setting(containerEl)
 			.setName("Output folder")
@@ -264,7 +262,6 @@ export class SlideAutosummarizeSettingTab extends PluginSettingTab {
 				sl
 					.setLimits(1, 10, 1)
 					.setValue(s.pagesPerBatch)
-					.setDynamicTooltip()
 					.onChange(async (v) => {
 						s.pagesPerBatch = v;
 						await this.plugin.saveSettings();
@@ -277,7 +274,6 @@ export class SlideAutosummarizeSettingTab extends PluginSettingTab {
 				sl
 					.setLimits(1, 4, 0.5)
 					.setValue(s.renderScale)
-					.setDynamicTooltip()
 					.onChange(async (v) => {
 						s.renderScale = v;
 						await this.plugin.saveSettings();
@@ -298,7 +294,6 @@ export class SlideAutosummarizeSettingTab extends PluginSettingTab {
 				sl
 					.setLimits(0, 2, 0.1)
 					.setValue(s.temperature)
-					.setDynamicTooltip()
 					.onChange(async (v) => {
 						s.temperature = v;
 						await this.plugin.saveSettings();
@@ -307,12 +302,11 @@ export class SlideAutosummarizeSettingTab extends PluginSettingTab {
 		}
 		new Setting(containerEl)
 			.setName("Auto-retry on overload")
-			.setDesc("Retries each batch on transient errors (429 / 5xx, e.g. Gemini 503 “high demand”, timeouts) with exponential backoff, honoring Retry-After. 0 = fail immediately.")
+			.setDesc("Retries each batch on transient errors (429, 5xx, timeouts) with exponential backoff, respecting any delay the server asks for. 0 = fail immediately.")
 			.addSlider((sl) =>
 				sl
 					.setLimits(0, 10, 1)
 					.setValue(s.maxRetries)
-					.setDynamicTooltip()
 					.onChange(async (v) => {
 						s.maxRetries = v;
 						await this.plugin.saveSettings();
@@ -334,7 +328,7 @@ export class SlideAutosummarizeSettingTab extends PluginSettingTab {
 			.setDesc("Appended to every summarization prompt (language, depth, focus…).")
 			.addTextArea((t) =>
 				t
-					.setPlaceholder("e.g. Write in German, undergraduate level, focus on derivations.")
+					.setPlaceholder("Language, level, and focus instructions.")
 					.setValue(s.customInstructions)
 					.onChange(async (v) => {
 						s.customInstructions = v;
@@ -342,7 +336,7 @@ export class SlideAutosummarizeSettingTab extends PluginSettingTab {
 					}),
 			);
 		new Setting(containerEl)
-			.setName("Auto-summarize new PDFs")
+			.setName("Auto-summarize new PDF files")
 			.setDesc("Watch the vault: every newly created .pdf gets summarized automatically.")
 			.addToggle((t) =>
 				t.setValue(s.autoSummarizeOnCreate).onChange(async (v) => {

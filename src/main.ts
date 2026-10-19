@@ -33,13 +33,13 @@ export default class SlideAutosummarizePlugin extends Plugin {
 
 		this.addCommand({
 			id: "summarize-pdf-picker",
-			name: "Summarize a PDF… (all PDFs in vault)",
+			name: "Summarize a PDF… (pick from vault)",
 			callback: () => {
 				const pdfs = this.app.vault
 					.getFiles()
 					.filter((f) => f.extension.toLowerCase() === "pdf");
 				if (pdfs.length === 0) {
-					new Notice("No PDFs found in the vault.");
+					new Notice("No PDF files found in the vault.");
 					return;
 				}
 				// Simple picker: summarize the most recently modified one if many?

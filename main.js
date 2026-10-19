@@ -25890,17 +25890,19 @@ __export(main_exports, {
   default: () => SlideAutosummarizePlugin
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian3 = require("obsidian");
+var import_obsidian4 = require("obsidian");
 
 // src/summarizer.ts
-var import_obsidian = require("obsidian");
+var import_obsidian2 = require("obsidian");
 
 // src/pdf.ts
 async function loadPdfjs() {
   const pdfjs = await Promise.resolve().then(() => (init_pdf(), pdf_exports));
   if (!pdfjs.GlobalWorkerOptions.workerSrc) {
-    const workerCode = (await Promise.resolve().then(() => (init_pdf_worker_min(), pdf_worker_min_exports))).default;
-    const blob = new Blob([workerCode], { type: "text/javascript" });
+    const workerModule = await Promise.resolve().then(() => (init_pdf_worker_min(), pdf_worker_min_exports));
+    const blob = new Blob([workerModule.default], {
+      type: "text/javascript"
+    });
     pdfjs.GlobalWorkerOptions.workerSrc = URL.createObjectURL(blob);
   }
   return pdfjs;
@@ -25928,9 +25930,7 @@ async function extractPdfSlides(data, opts = {}) {
     let text = "";
     try {
       const tc = await page.getTextContent();
-      text = tc.items.map(
-        (it) => typeof it === "object" && it !== null && "str" in it ? String(it.str) : ""
-      ).join(" ").replace(/\s+/g, " ").trim();
+      text = tc.items.map((it) => "str" in it ? it.str : "").join(" ").replace(/\s+/g, " ").trim();
     } catch (e) {
       console.warn(`slide-autosummarize: text extraction failed p.${n}`, e);
     }
@@ -25984,7 +25984,7 @@ function workerHelp() {
 }
 async function renderPageToPng(page, scale) {
   const viewport = page.getViewport({ scale });
-  const canvas = document.createElement("canvas");
+  const canvas = createEl("canvas");
   canvas.width = Math.floor(viewport.width);
   canvas.height = Math.floor(viewport.height);
   const ctx = canvas.getContext("2d");
@@ -26008,19 +26008,58 @@ function bytesToBase64(bytes) {
 }
 
 // src/llm/types.ts
-async function fetchWithTimeout(url, init, timeoutMs = 12e4) {
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), timeoutMs);
+var import_obsidian = require("obsidian");
+function headersToRecord(headers) {
+  const out = {};
+  if (!headers) return out;
+  if (headers instanceof Headers) {
+    headers.forEach((value, key) => {
+      out[key] = value;
+    });
+  } else if (Array.isArray(headers)) {
+    for (const [key, value] of headers) out[key] = value;
+  } else {
+    for (const [key, value] of Object.entries(headers)) out[key] = value;
+  }
+  return out;
+}
+function headerValue(headers, name) {
+  const lower = name.toLowerCase();
+  for (const [key, value] of Object.entries(headers)) {
+    if (key.toLowerCase() === lower) return value;
+  }
+  return void 0;
+}
+async function requestWithTimeout(url, init, timeoutMs = 12e4) {
+  var _a2;
+  const request = (0, import_obsidian.requestUrl)({
+    url,
+    method: (_a2 = init.method) != null ? _a2 : "GET",
+    headers: headersToRecord(init.headers),
+    body: typeof init.body === "string" ? init.body : void 0,
+    throw: false
+  });
+  request.catch(() => void 0);
+  let timer = 0;
   try {
-    const res = await fetch(url, { ...init, signal: ctrl.signal });
-    return res;
-  } catch (e) {
-    if (e.name === "AbortError") {
-      throw new Error(`Request timed out after ${timeoutMs}ms: ${url}`);
-    }
-    throw e;
+    const res = await Promise.race([
+      request,
+      new Promise((_, reject) => {
+        timer = window.setTimeout(
+          () => reject(new Error(`Request timed out after ${timeoutMs}ms: ${url}`)),
+          timeoutMs
+        );
+      })
+    ]);
+    return {
+      status: res.status,
+      ok: res.status >= 200 && res.status < 300,
+      headers: res.headers,
+      text: () => Promise.resolve(res.text),
+      json: () => Promise.resolve(res.json)
+    };
   } finally {
-    clearTimeout(t);
+    window.clearTimeout(timer);
   }
 }
 async function throwIfBad(res, providerLabel) {
@@ -26032,16 +26071,15 @@ async function throwIfBad(res, providerLabel) {
   }
   const snippet = body.slice(0, 800);
   throw new Error(
-    `${providerLabel} request failed (HTTP ${res.status}): ${snippet || res.statusText}`
+    `${providerLabel} request failed (HTTP ${res.status}): ${snippet || "no response body"}`
   );
 }
 function isTransientStatus(status) {
   return status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
 }
 function parseRetryAfterMs(res, fallbackMs, maxMs) {
-  var _a2, _b;
   try {
-    const raw = (_b = (_a2 = res.headers) == null ? void 0 : _a2.get) == null ? void 0 : _b.call(_a2, "retry-after");
+    const raw = headerValue(res.headers, "retry-after");
     if (raw) {
       const secs = Number(raw);
       if (Number.isFinite(secs) && secs >= 0) {
@@ -26057,7 +26095,7 @@ function parseRetryAfterMs(res, fallbackMs, maxMs) {
   return Math.min(Math.max(0, fallbackMs), maxMs);
 }
 function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 async function fetchWithRetry(url, init, opts = {}) {
   var _a2, _b, _c, _d, _e, _f, _g;
@@ -26069,7 +26107,7 @@ async function fetchWithRetry(url, init, opts = {}) {
   for (let attempt = 0; ; attempt++) {
     let res;
     try {
-      res = await fetchWithTimeout(url, init, timeoutMs);
+      res = await requestWithTimeout(url, init, timeoutMs);
     } catch (e) {
       const reason = e instanceof Error ? e.message : String(e);
       if (attempt >= maxRetries) {
@@ -26097,7 +26135,7 @@ async function fetchWithRetry(url, init, opts = {}) {
       } catch (e) {
       }
       throw new Error(
-        `${label} request failed after ${attempt + 1} attempt(s) (last HTTP ${res.status}): ${snippet || res.statusText}`
+        `${label} request failed after ${attempt + 1} attempt(s) (last HTTP ${res.status}): ${snippet || "no response body"}`
       );
     }
     const backoff = baseDelayMs * 2 ** attempt + Math.random() * 1e3;
@@ -26192,7 +26230,7 @@ async function cropPng(pngBytes, box) {
   );
   try {
     const img = await loadImage(url);
-    const canvas = document.createElement("canvas");
+    const canvas = createEl("canvas");
     canvas.width = w;
     canvas.height = h;
     const ctx = canvas.getContext("2d");
@@ -26690,7 +26728,7 @@ async function summarizePdfFile(vault, pdfFile, settings, onProgress) {
   });
   if (pages.length === 0) throw new Error("PDF has no pages to summarize.");
   const base = sanitizeBase(pdfFile.basename);
-  const imgDir = (0, import_obsidian.normalizePath)(`${settings.imageFolder}/${base}`);
+  const imgDir = (0, import_obsidian2.normalizePath)(`${settings.imageFolder}/${base}`);
   const renders = /* @__PURE__ */ new Map();
   for (const p of pages) {
     if (p.imageBytes && p.imageWidth && p.imageHeight) {
@@ -26707,7 +26745,7 @@ async function summarizePdfFile(vault, pdfFile, settings, onProgress) {
       const r = renders.get(p.pageNumber);
       if (!r) continue;
       const fname = `${base}-p${String(p.pageNumber).padStart(2, "0")}.png`;
-      await writeBinary(vault, (0, import_obsidian.normalizePath)(`${imgDir}/${fname}`), r.bytes);
+      await writeBinary(vault, (0, import_obsidian2.normalizePath)(`${imgDir}/${fname}`), r.bytes);
     }
   }
   const slides = pages.map((p) => ({
@@ -26790,7 +26828,7 @@ ${priorSection}`;
       const k = ((_a2 = figCount.get(ref.slide)) != null ? _a2 : 0) + 1;
       figCount.set(ref.slide, k);
       const fname = `${base}-p${String(ref.slide).padStart(2, "0")}-fig${k}.png`;
-      const fpath = (0, import_obsidian.normalizePath)(`${imgDir}/${fname}`);
+      const fpath = (0, import_obsidian2.normalizePath)(`${imgDir}/${fname}`);
       await writeBinary(vault, fpath, crop);
       const caption = ref.caption ? `
 *${ref.caption}*` : "";
@@ -26824,11 +26862,11 @@ ${priorSection}`;
     ""
   ].join("\n");
   onProgress == null ? void 0 : onProgress({ phase: "write", done: 0, total: 1, label: "Writing note\u2026" });
-  const outDir = (0, import_obsidian.normalizePath)(settings.outputFolder);
+  const outDir = (0, import_obsidian2.normalizePath)(settings.outputFolder);
   await ensureFolder(vault, outDir);
-  const outPath = (0, import_obsidian.normalizePath)(`${outDir}/${base}.md`);
+  const outPath = (0, import_obsidian2.normalizePath)(`${outDir}/${base}.md`);
   const existingNote = vault.getAbstractFileByPath(outPath);
-  if (existingNote instanceof import_obsidian.TFile) {
+  if (existingNote instanceof import_obsidian2.TFile) {
     await vault.modify(existingNote, note);
   } else {
     await vault.create(outPath, note);
@@ -26837,7 +26875,7 @@ ${priorSection}`;
   return outPath;
 }
 async function ensureFolder(vault, dir) {
-  const norm = (0, import_obsidian.normalizePath)(dir);
+  const norm = (0, import_obsidian2.normalizePath)(dir);
   if (!norm || norm === "/") return;
   if (vault.getAbstractFileByPath(norm)) return;
   try {
@@ -26848,7 +26886,7 @@ async function ensureFolder(vault, dir) {
 }
 async function writeBinary(vault, path, bytes) {
   const existing = vault.getAbstractFileByPath(path);
-  if (existing instanceof import_obsidian.TFile) {
+  if (existing instanceof import_obsidian2.TFile) {
     await vault.modifyBinary(existing, bytes.buffer);
     return;
   }
@@ -26857,9 +26895,9 @@ async function writeBinary(vault, path, bytes) {
 }
 
 // src/settings.ts
-var import_obsidian2 = require("obsidian");
+var import_obsidian3 = require("obsidian");
 var CUSTOM_MODEL_OPTION = "__custom__";
-var SlideAutosummarizeSettingTab = class extends import_obsidian2.PluginSettingTab {
+var SlideAutosummarizeSettingTab = class extends import_obsidian3.PluginSettingTab {
   constructor(app, plugin) {
     super(app, plugin);
     this.plugin = plugin;
@@ -26874,7 +26912,7 @@ var SlideAutosummarizeSettingTab = class extends import_obsidian2.PluginSettingT
     const current = get();
     const isCustom = !models.includes(current);
     if (models.length > 0) {
-      new import_obsidian2.Setting(containerEl).setName(name).setDesc(desc).addDropdown((d) => {
+      new import_obsidian3.Setting(containerEl).setName(name).setDesc(desc).addDropdown((d) => {
         for (const m of models) d.addOption(m, m);
         d.addOption(CUSTOM_MODEL_OPTION, "Custom\u2026 (type below)");
         d.setValue(isCustom ? CUSTOM_MODEL_OPTION : current);
@@ -26887,7 +26925,7 @@ var SlideAutosummarizeSettingTab = class extends import_obsidian2.PluginSettingT
       });
     }
     if (models.length === 0 || isCustom || current === "") {
-      new import_obsidian2.Setting(containerEl).setName(models.length === 0 ? name : `${name} (custom)`).setDesc(
+      new import_obsidian3.Setting(containerEl).setName(models.length === 0 ? name : `${name} (custom)`).setDesc(
         models.length === 0 ? desc : "Exact model id, e.g. gemini-3.5-flash-lite"
       ).addText(
         (t) => {
@@ -26905,18 +26943,17 @@ var SlideAutosummarizeSettingTab = class extends import_obsidian2.PluginSettingT
     containerEl.empty();
     const s = this.plugin.settings;
     const rerender = () => this.display();
-    containerEl.createEl("h2", { text: "Slide Autosummarize" });
-    new import_obsidian2.Setting(containerEl).setName("LLM provider").setDesc("Modular backend. Gemini first; Ollama runs fully local. New APIs plug in via src/llm/*.").addDropdown(
+    new import_obsidian3.Setting(containerEl).setName("LLM provider").setDesc("Modular backend. Gemini first; Ollama runs fully local. Add new providers as separate modules.").addDropdown(
       (d) => d.addOption("gemini", "Google Gemini").addOption("openai", "OpenAI").addOption("anthropic", "Anthropic Claude").addOption("ollama", "Ollama (local)").addOption("custom", "Custom OpenAI-compatible").setValue(s.provider).onChange(async (v) => {
         s.provider = v;
         await this.plugin.saveSettings();
         rerender();
       })
     );
-    containerEl.createEl("h3", { text: "Provider credentials & models" });
+    new import_obsidian3.Setting(containerEl).setName("Provider credentials & models").setHeading();
     if (s.provider === "gemini") {
-      new import_obsidian2.Setting(containerEl).setName("Gemini API key").setDesc("From https://aistudio.google.com/apikey").addText(
-        (t) => t.setPlaceholder("AIza\u2026").setValue(s.geminiApiKey).onChange(async (v) => {
+      new import_obsidian3.Setting(containerEl).setName("Gemini API key").setDesc("Create a key for the Gemini API.").addText(
+        (t) => t.setPlaceholder("Paste key\u2026").setValue(s.geminiApiKey).onChange(async (v) => {
           s.geminiApiKey = v.trim();
           await this.plugin.saveSettings();
         })
@@ -26933,8 +26970,8 @@ var SlideAutosummarizeSettingTab = class extends import_obsidian2.PluginSettingT
       );
     }
     if (s.provider === "openai") {
-      new import_obsidian2.Setting(containerEl).setName("OpenAI API key").addText(
-        (t) => t.setPlaceholder("sk-\u2026").setValue(s.openaiApiKey).onChange(async (v) => {
+      new import_obsidian3.Setting(containerEl).setName("OpenAI API key").addText(
+        (t) => t.setPlaceholder("Paste key\u2026").setValue(s.openaiApiKey).onChange(async (v) => {
           s.openaiApiKey = v.trim();
           await this.plugin.saveSettings();
         })
@@ -26951,8 +26988,8 @@ var SlideAutosummarizeSettingTab = class extends import_obsidian2.PluginSettingT
       );
     }
     if (s.provider === "anthropic") {
-      new import_obsidian2.Setting(containerEl).setName("Anthropic API key").addText(
-        (t) => t.setPlaceholder("sk-ant-\u2026").setValue(s.anthropicApiKey).onChange(async (v) => {
+      new import_obsidian3.Setting(containerEl).setName("Anthropic API key").addText(
+        (t) => t.setPlaceholder("Paste key\u2026").setValue(s.anthropicApiKey).onChange(async (v) => {
           s.anthropicApiKey = v.trim();
           await this.plugin.saveSettings();
         })
@@ -26969,7 +27006,7 @@ var SlideAutosummarizeSettingTab = class extends import_obsidian2.PluginSettingT
       );
     }
     if (s.provider === "ollama") {
-      new import_obsidian2.Setting(containerEl).setName("Ollama base URL").setDesc("OpenAI-compatible endpoint, e.g. http://localhost:11434/v1").addText(
+      new import_obsidian3.Setting(containerEl).setName("Ollama base URL").setDesc("OpenAI-compatible endpoint. The default local server address works as-is.").addText(
         (t) => t.setValue(s.ollamaBaseUrl).onChange(async (v) => {
           s.ollamaBaseUrl = v.trim();
           await this.plugin.saveSettings();
@@ -26987,13 +27024,13 @@ var SlideAutosummarizeSettingTab = class extends import_obsidian2.PluginSettingT
       );
     }
     if (s.provider === "custom") {
-      new import_obsidian2.Setting(containerEl).setName("Base URL").setDesc("Any OpenAI-compatible /chat/completions endpoint").addText(
+      new import_obsidian3.Setting(containerEl).setName("Base URL").setDesc("Any OpenAI-compatible /chat/completions endpoint").addText(
         (t) => t.setValue(s.customBaseUrl).onChange(async (v) => {
           s.customBaseUrl = v.trim();
           await this.plugin.saveSettings();
         })
       );
-      new import_obsidian2.Setting(containerEl).setName("API key (if needed)").addText(
+      new import_obsidian3.Setting(containerEl).setName("API key (if needed)").addText(
         (t) => t.setValue(s.customApiKey).onChange(async (v) => {
           s.customApiKey = v.trim();
           await this.plugin.saveSettings();
@@ -27010,50 +27047,50 @@ var SlideAutosummarizeSettingTab = class extends import_obsidian2.PluginSettingT
         }
       );
     }
-    containerEl.createEl("h3", { text: "Pipeline" });
-    new import_obsidian2.Setting(containerEl).setName("Output folder").setDesc("Markdown notes are written here, one per PDF.").addText(
+    new import_obsidian3.Setting(containerEl).setName("Pipeline").setHeading();
+    new import_obsidian3.Setting(containerEl).setName("Output folder").setDesc("Markdown notes are written here, one per PDF.").addText(
       (t) => t.setValue(s.outputFolder).onChange(async (v) => {
         s.outputFolder = v.trim() || "Summaries";
         await this.plugin.saveSettings();
       })
     );
-    new import_obsidian2.Setting(containerEl).setName("Image folder").setDesc("Rendered slide PNGs live in <folder>/<pdf-name>/ and get embedded in the note.").addText(
+    new import_obsidian3.Setting(containerEl).setName("Image folder").setDesc("Rendered slide PNGs live in <folder>/<pdf-name>/ and get embedded in the note.").addText(
       (t) => t.setValue(s.imageFolder).onChange(async (v) => {
         s.imageFolder = v.trim() || "Attachments/slides";
         await this.plugin.saveSettings();
       })
     );
-    new import_obsidian2.Setting(containerEl).setName("Send slide images to the LLM").setDesc("Multimodal input. Required for figure detection (bounding boxes). Disable for text-only models or to save tokens.").addToggle(
+    new import_obsidian3.Setting(containerEl).setName("Send slide images to the LLM").setDesc("Multimodal input. Required for figure detection (bounding boxes). Disable for text-only models or to save tokens.").addToggle(
       (t) => t.setValue(s.includeImages).onChange(async (v) => {
         s.includeImages = v;
         await this.plugin.saveSettings();
       })
     );
-    new import_obsidian2.Setting(containerEl).setName("Embed relevant figures in the note").setDesc("Crops the LLM-picked figures (diagrams, charts, photos) via bounding boxes and embeds only those \u2014 never full slides.").addToggle(
+    new import_obsidian3.Setting(containerEl).setName("Embed relevant figures in the note").setDesc("Crops the LLM-picked figures (diagrams, charts, photos) via bounding boxes and embeds only those \u2014 never full slides.").addToggle(
       (t) => t.setValue(s.embedImagesInNote).onChange(async (v) => {
         s.embedImagesInNote = v;
         await this.plugin.saveSettings();
       })
     );
-    new import_obsidian2.Setting(containerEl).setName("Keep full slide renders").setDesc("Also save every rendered slide PNG to disk for reference (not embedded in the note).").addToggle(
+    new import_obsidian3.Setting(containerEl).setName("Keep full slide renders").setDesc("Also save every rendered slide PNG to disk for reference (not embedded in the note).").addToggle(
       (t) => t.setValue(s.saveFullPages).onChange(async (v) => {
         s.saveFullPages = v;
         await this.plugin.saveSettings();
       })
     );
-    new import_obsidian2.Setting(containerEl).setName("Slides per LLM call").setDesc("Batch size. 2\u20134 keeps context tight; larger saves calls but risks truncation.").addSlider(
-      (sl) => sl.setLimits(1, 10, 1).setValue(s.pagesPerBatch).setDynamicTooltip().onChange(async (v) => {
+    new import_obsidian3.Setting(containerEl).setName("Slides per LLM call").setDesc("Batch size. 2\u20134 keeps context tight; larger saves calls but risks truncation.").addSlider(
+      (sl) => sl.setLimits(1, 10, 1).setValue(s.pagesPerBatch).onChange(async (v) => {
         s.pagesPerBatch = v;
         await this.plugin.saveSettings();
       })
     );
-    new import_obsidian2.Setting(containerEl).setName("Render scale").setDesc("Higher = sharper images for the LLM, more tokens. 2.0 \u2248 good default.").addSlider(
-      (sl) => sl.setLimits(1, 4, 0.5).setValue(s.renderScale).setDynamicTooltip().onChange(async (v) => {
+    new import_obsidian3.Setting(containerEl).setName("Render scale").setDesc("Higher = sharper images for the LLM, more tokens. 2.0 \u2248 good default.").addSlider(
+      (sl) => sl.setLimits(1, 4, 0.5).setValue(s.renderScale).onChange(async (v) => {
         s.renderScale = v;
         await this.plugin.saveSettings();
       })
     );
-    new import_obsidian2.Setting(containerEl).setName("Temperature").setDesc("On = omit temperature from API calls (each provider uses its own default). Off = send the slider value.").addToggle(
+    new import_obsidian3.Setting(containerEl).setName("Temperature").setDesc("On = omit temperature from API calls (each provider uses its own default). Off = send the slider value.").addToggle(
       (t) => t.setValue(s.useDefaultTemperature).onChange(async (v) => {
         s.useDefaultTemperature = v;
         await this.plugin.saveSettings();
@@ -27061,20 +27098,20 @@ var SlideAutosummarizeSettingTab = class extends import_obsidian2.PluginSettingT
       })
     );
     if (!s.useDefaultTemperature) {
-      new import_obsidian2.Setting(containerEl).setName("Custom temperature").addSlider(
-        (sl) => sl.setLimits(0, 2, 0.1).setValue(s.temperature).setDynamicTooltip().onChange(async (v) => {
+      new import_obsidian3.Setting(containerEl).setName("Custom temperature").addSlider(
+        (sl) => sl.setLimits(0, 2, 0.1).setValue(s.temperature).onChange(async (v) => {
           s.temperature = v;
           await this.plugin.saveSettings();
         })
       );
     }
-    new import_obsidian2.Setting(containerEl).setName("Auto-retry on overload").setDesc("Retries each batch on transient errors (429 / 5xx, e.g. Gemini 503 \u201Chigh demand\u201D, timeouts) with exponential backoff, honoring Retry-After. 0 = fail immediately.").addSlider(
-      (sl) => sl.setLimits(0, 10, 1).setValue(s.maxRetries).setDynamicTooltip().onChange(async (v) => {
+    new import_obsidian3.Setting(containerEl).setName("Auto-retry on overload").setDesc("Retries each batch on transient errors (429, 5xx, timeouts) with exponential backoff, respecting any delay the server asks for. 0 = fail immediately.").addSlider(
+      (sl) => sl.setLimits(0, 10, 1).setValue(s.maxRetries).onChange(async (v) => {
         s.maxRetries = v;
         await this.plugin.saveSettings();
       })
     );
-    new import_obsidian2.Setting(containerEl).setName("Max tokens").addText(
+    new import_obsidian3.Setting(containerEl).setName("Max tokens").addText(
       (t) => t.setValue(String(s.maxTokens)).onChange(async (v) => {
         const n = parseInt(v, 10);
         if (Number.isFinite(n) && n > 0) {
@@ -27083,13 +27120,13 @@ var SlideAutosummarizeSettingTab = class extends import_obsidian2.PluginSettingT
         }
       })
     );
-    new import_obsidian2.Setting(containerEl).setName("Extra instructions").setDesc("Appended to every summarization prompt (language, depth, focus\u2026).").addTextArea(
-      (t) => t.setPlaceholder("e.g. Write in German, undergraduate level, focus on derivations.").setValue(s.customInstructions).onChange(async (v) => {
+    new import_obsidian3.Setting(containerEl).setName("Extra instructions").setDesc("Appended to every summarization prompt (language, depth, focus\u2026).").addTextArea(
+      (t) => t.setPlaceholder("Language, level, and focus instructions.").setValue(s.customInstructions).onChange(async (v) => {
         s.customInstructions = v;
         await this.plugin.saveSettings();
       })
     );
-    new import_obsidian2.Setting(containerEl).setName("Auto-summarize new PDFs").setDesc("Watch the vault: every newly created .pdf gets summarized automatically.").addToggle(
+    new import_obsidian3.Setting(containerEl).setName("Auto-summarize new PDF files").setDesc("Watch the vault: every newly created .pdf gets summarized automatically.").addToggle(
       (t) => t.setValue(s.autoSummarizeOnCreate).onChange(async (v) => {
         s.autoSummarizeOnCreate = v;
         await this.plugin.saveSettings();
@@ -27099,7 +27136,7 @@ var SlideAutosummarizeSettingTab = class extends import_obsidian2.PluginSettingT
 };
 
 // src/main.ts
-var SlideAutosummarizePlugin = class extends import_obsidian3.Plugin {
+var SlideAutosummarizePlugin = class extends import_obsidian4.Plugin {
   constructor() {
     super(...arguments);
     this.settings = { ...DEFAULT_SETTINGS };
@@ -27111,7 +27148,7 @@ var SlideAutosummarizePlugin = class extends import_obsidian3.Plugin {
     this.addRibbonIcon("sparkles", "Summarize active PDF", () => {
       const f = this.activePdfFile();
       if (f) void this.runForFile(f);
-      else new import_obsidian3.Notice("Open a PDF in the vault to summarize it.");
+      else new import_obsidian4.Notice("Open a PDF in the vault to summarize it.");
     });
     this.addCommand({
       id: "summarize-active-pdf",
@@ -27125,18 +27162,18 @@ var SlideAutosummarizePlugin = class extends import_obsidian3.Plugin {
     });
     this.addCommand({
       id: "summarize-pdf-picker",
-      name: "Summarize a PDF\u2026 (all PDFs in vault)",
+      name: "Summarize a PDF\u2026 (pick from vault)",
       callback: () => {
         const pdfs = this.app.vault.getFiles().filter((f) => f.extension.toLowerCase() === "pdf");
         if (pdfs.length === 0) {
-          new import_obsidian3.Notice("No PDFs found in the vault.");
+          new import_obsidian4.Notice("No PDF files found in the vault.");
           return;
         }
         if (pdfs.length === 1) {
           void this.runForFile(pdfs[0]);
           return;
         }
-        new import_obsidian3.Notice(
+        new import_obsidian4.Notice(
           `${pdfs.length} PDFs found \u2014 right-click a PDF in the explorer and choose \u201CSummarize PDF slides\u201D.`,
           8e3
         );
@@ -27144,7 +27181,7 @@ var SlideAutosummarizePlugin = class extends import_obsidian3.Plugin {
     });
     this.registerEvent(
       this.app.workspace.on("file-menu", (menu, file) => {
-        if (file instanceof import_obsidian3.TFile && file.extension.toLowerCase() === "pdf") {
+        if (file instanceof import_obsidian4.TFile && file.extension.toLowerCase() === "pdf") {
           menu.addItem(
             (item) => item.setTitle("Summarize PDF slides").setIcon("sparkles").onClick(() => void this.runForFile(file))
           );
@@ -27153,7 +27190,7 @@ var SlideAutosummarizePlugin = class extends import_obsidian3.Plugin {
     );
     this.registerEvent(
       this.app.vault.on("create", (file) => {
-        if (this.settings.autoSummarizeOnCreate && file instanceof import_obsidian3.TFile && file.extension.toLowerCase() === "pdf") {
+        if (this.settings.autoSummarizeOnCreate && file instanceof import_obsidian4.TFile && file.extension.toLowerCase() === "pdf") {
           this.registerInterval(
             window.setTimeout(() => void this.runForFile(file), 1500)
           );
@@ -27175,11 +27212,11 @@ var SlideAutosummarizePlugin = class extends import_obsidian3.Plugin {
   /** Guarded entry: one run per file at a time, errors surfaced via Notice. */
   async runForFile(file) {
     if (this.running.has(file.path)) {
-      new import_obsidian3.Notice(`Already summarizing ${file.basename}\u2026`);
+      new import_obsidian4.Notice(`Already summarizing ${file.basename}\u2026`);
       return;
     }
     this.running.add(file.path);
-    const notice = new import_obsidian3.Notice(`Summarizing ${file.basename}\u2026 (extracting slides)`, 0);
+    const notice = new import_obsidian4.Notice(`Summarizing ${file.basename}\u2026 (extracting slides)`, 0);
     try {
       const outPath = await summarizePdfFile(
         this.app.vault,
@@ -27192,14 +27229,14 @@ var SlideAutosummarizePlugin = class extends import_obsidian3.Plugin {
       notice.setMessage(`Done \u2192 ${outPath}`);
       this.registerInterval(window.setTimeout(() => notice.hide(), 5e3));
       const out = this.app.vault.getAbstractFileByPath(outPath);
-      if (out instanceof import_obsidian3.TFile) {
+      if (out instanceof import_obsidian4.TFile) {
         await this.app.workspace.getLeaf(false).openFile(out);
       }
     } catch (e) {
       notice.hide();
       const msg = e instanceof Error ? e.message : String(e);
       console.error("slide-autosummarize failed:", e);
-      new import_obsidian3.Notice(`Slide Autosummarize failed: ${msg}`, 12e3);
+      new import_obsidian4.Notice(`Slide Autosummarize failed: ${msg}`, 12e3);
     } finally {
       this.running.delete(file.path);
     }

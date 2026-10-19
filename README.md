@@ -11,6 +11,8 @@ Works with **Google Gemini** (default), **OpenAI**, **Anthropic Claude**, and **
 
 ## Install
 
+> Requires Obsidian **1.4.0** or later.
+
 ### Option A — Community plugins (once accepted)
 
 1. Obsidian → **Settings → Community plugins → Browse**.

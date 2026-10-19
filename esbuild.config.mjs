@@ -1,10 +1,18 @@
 import esbuild from "esbuild";
 import process from "process";
-import builtins from "builtin-modules";
 import { promises as fs } from "fs";
-import { createRequire } from "module";
+import { builtinModules, createRequire } from "module";
 
 const require = createRequire(import.meta.url);
+
+/** Node built-ins, with and without the "node:" prefix, as esbuild externals. */
+const nodeBuiltins = [
+	...new Set(
+		builtinModules.flatMap((m) =>
+			m.startsWith("node:") ? [m, m.slice(5)] : [m, `node:${m}`],
+		),
+	),
+];
 
 /**
  * Bundle pdf.js's worker as inline TEXT so the plugin ships a single
@@ -54,7 +62,7 @@ const context = await esbuild.context({
 		"@lezer/common",
 		"@lezer/highlight",
 		"@lezer/lr",
-		...builtins,
+		...nodeBuiltins,
 	],
 	format: "cjs",
 	target: "es2018",
