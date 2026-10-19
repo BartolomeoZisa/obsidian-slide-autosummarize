@@ -23,6 +23,10 @@ Edit `manifest.json`:
 
 ## 2. Create the GitHub repo
 
+> Already done: the repo is live at
+> <https://github.com/BartolomeoZisa/obsidian-slide-autosummarize>.
+> Skip to step 3.
+
 ```bash
 cd obsidian-slide-autosummarize
 git init
@@ -53,10 +57,19 @@ git push --follow-tags
 The `release.yml` workflow then builds the plugin and creates a **draft** release
 with `main.js`, `manifest.json`, `styles.css` attached.
 
+**The draft must be published** — while it is a draft, the download URLs below
+return 404 and neither BRAT nor manual install can fetch the plugin.
+
 Go to **Releases → the draft → Edit → Publish release**.
 
-Verify: `https://github.com/BartolomeoZisa/obsidian-slide-autosummarize/releases/latest/download/manifest.json`
-should return your manifest.
+Verify all three resolve (HTTP 200):
+
+```bash
+BASE=https://github.com/BartolomeoZisa/obsidian-slide-autosummarize/releases/latest/download
+for f in main.js manifest.json styles.css; do
+  curl -s -o /dev/null -w "$f -> %{http_code}\n" -L "$BASE/$f"
+done
+```
 
 ## 4. Open the submission PR
 

@@ -16,13 +16,28 @@ Works with **Google Gemini** (default), **OpenAI**, **Anthropic Claude**, and **
 1. Obsidian → **Settings → Community plugins → Browse**.
 2. Search **Slide Autosummarize** → **Install** → **Enable**.
 
-> The plugin is not in the directory yet. Until it is, use Option B or C.
+> The plugin is not in the directory yet. Until it is, use one of the options below.
 
-### Option B — Manual install (recommended for now)
+### Option B — BRAT (easiest from GitHub, auto-updates)
 
-1. Download `main.js`, `manifest.json` and `styles.css` from the
-   [latest release](../../releases/latest).
-2. Put them in your vault:
+[BRAT](https://github.com/TfTHacker/obsidian42-brat) installs plugins straight from a
+GitHub repo and keeps them updated.
+
+1. Install **BRAT** from **Settings → Community plugins → Browse** and enable it.
+2. Run `Ctrl/Cmd+P` → **BRAT: Add a beta plugin for testing**.
+3. Paste: `https://github.com/BartolomeoZisa/obsidian-slide-autosummarize`
+4. Click **Add Plugin** → enable **Slide Autosummarize** in
+   **Settings → Community plugins**.
+
+BRAT tracks the latest GitHub release, so future versions arrive without manual copying.
+
+### Option C — Manual install from GitHub (no BRAT)
+
+1. Open the [releases page](https://github.com/BartolomeoZisa/obsidian-slide-autosummarize/releases)
+   and pick the latest release.
+2. Download the three assets: `main.js`, `manifest.json`, `styles.css`
+   (under **Assets**; do **not** download the "Source code" archives).
+3. Create this folder in your vault:
 
    ```
    <your-vault>/.obsidian/plugins/slide-autosummarize/
@@ -32,15 +47,44 @@ Works with **Google Gemini** (default), **OpenAI**, **Anthropic Claude**, and **
    - **macOS:** `~/Documents/<vault>/.obsidian/plugins/slide-autosummarize/`
    - **Linux:** `~/Documents/<vault>/.obsidian/plugins/slide-autosummarize/`
 
-   Create the folder if it does not exist. The three files must sit **directly** inside it.
-3. In Obsidian: **Settings → Community plugins** → turn off **Restricted mode** if needed →
-   click the refresh icon → enable **Slide Autosummarize**.
-4. If the plugin does not appear, restart Obsidian.
+   The folder must be named exactly `slide-autosummarize` and the three files must sit
+   **directly** inside it (not in a subfolder).
+4. In Obsidian: **Settings → Community plugins** → turn off **Restricted mode** if needed →
+   click the refresh icon next to **Installed plugins** → enable **Slide Autosummarize**.
+5. If it does not appear, restart Obsidian.
 
-### Option C — Build from source
+Direct download links (once a release is published):
+
+- [`main.js`](https://github.com/BartolomeoZisa/obsidian-slide-autosummarize/releases/latest/download/main.js)
+- [`manifest.json`](https://github.com/BartolomeoZisa/obsidian-slide-autosummarize/releases/latest/download/manifest.json)
+- [`styles.css`](https://github.com/BartolomeoZisa/obsidian-slide-autosummarize/releases/latest/download/styles.css)
+
+Or from a terminal:
 
 ```bash
-git clone <this-repo>
+VAULT="$HOME/Documents/MyVault"   # <- your vault path
+DEST="$VAULT/.obsidian/plugins/slide-autosummarize"
+mkdir -p "$DEST"
+BASE=https://github.com/BartolomeoZisa/obsidian-slide-autosummarize/releases/latest/download
+for f in main.js manifest.json styles.css; do curl -fL "$BASE/$f" -o "$DEST/$f"; done
+```
+
+Windows PowerShell equivalent:
+
+```powershell
+$vault = "C:\Users\you\Documents\MyVault"
+$dest  = Join-Path $vault ".obsidian\plugins\slide-autosummarize"
+New-Item -ItemType Directory -Force -Path $dest | Out-Null
+$base  = "https://github.com/BartolomeoZisa/obsidian-slide-autosummarize/releases/latest/download"
+foreach ($f in "main.js","manifest.json","styles.css") {
+  Invoke-WebRequest "$base/$f" -OutFile (Join-Path $dest $f)
+}
+```
+
+### Option D — Build from source
+
+```bash
+git clone https://github.com/BartolomeoZisa/obsidian-slide-autosummarize.git
 cd obsidian-slide-autosummarize
 npm install
 npm run build        # typecheck + production bundle -> main.js
@@ -50,6 +94,13 @@ Then copy `main.js`, `manifest.json`, `styles.css` into
 `<vault>/.obsidian/plugins/slide-autosummarize/` and enable the plugin.
 
 Development: `npm run dev` watch-builds `main.js` on save.
+
+### Updating
+
+- **BRAT:** updates automatically, or run `Ctrl/Cmd+P` → **BRAT: Check for updates to all beta plugins**.
+- **Manual:** download the new `main.js` from the latest release and replace the old one
+  (keep your `data.json` — that file holds your settings and API keys).
+- **Community directory** (after acceptance): **Settings → Community plugins → Check for updates**.
 
 ---
 
