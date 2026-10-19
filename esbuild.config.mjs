@@ -1,6 +1,7 @@
 import esbuild from "esbuild";
 import process from "process";
 import { promises as fs } from "fs";
+import path from "node:path";
 import { builtinModules, createRequire } from "module";
 
 const require = createRequire(import.meta.url);
@@ -24,13 +25,17 @@ const pdfWorkerTextPlugin = {
 	setup(build) {
 		build.onResolve({ filter: /pdf\.worker\.min\.mjs$/ }, (args) => {
 			if (!args.path.includes("pdf.worker")) return null;
+			const absolute = require.resolve(args.path, { paths: [args.resolveDir] });
 			return {
-				path: require.resolve(args.path, { paths: [args.resolveDir] }),
+				// Relative so the generated bundle is identical on every machine
+				// (the build path would otherwise be embedded in a comment).
+				path: path.relative(process.cwd(), absolute).split(path.sep).join("/"),
 				namespace: "pdf-worker-text",
+				pluginData: { absolute },
 			};
 		});
 		build.onLoad({ filter: /.*/, namespace: "pdf-worker-text" }, async (args) => ({
-			contents: await fs.readFile(args.path, "utf8"),
+			contents: await fs.readFile(args.pluginData?.absolute ?? args.path, "utf8"),
 			loader: "text",
 		}));
 	},
