@@ -1,68 +1,44 @@
 # Publishing to the Obsidian community directory
 
-I can prepare the repo, but **you** have to do the final submission: it needs your
-GitHub account and a pull request to `obsidianmd/obsidian-releases`. Nothing here
-can be done on your behalf.
+> **The old pull-request route is retired.** Since May 2026 you no longer open a PR
+> against `obsidianmd/obsidian-releases` — that repo has pull requests disabled
+> (`has_pull_requests: false`), so any PR attempt fails with
+> *"does not have the correct permissions"* or a 404.
+> Submission is now a web form at <https://community.obsidian.md>.
 
-Time: ~10 minutes, plus a few days to a couple of weeks for review.
+I prepared everything on the repo side. **You** have to do the submission itself: it
+needs your Obsidian account and a GitHub account link. Review is automated and usually
+takes a few minutes.
 
 ---
 
-## 1. Fill in your details
+## Status
 
-Edit `manifest.json`:
+| Step | State |
+|---|---|
+| GitHub repo public | ✅ <https://github.com/BartolomeoZisa/obsidian-slide-autosummarize> |
+| `README.md` with install + usage | ✅ |
+| `LICENSE` (GPL-3.0-or-later) | ✅ |
+| `manifest.json` (author, authorUrl, description ≤ 250 chars, period) | ✅ |
+| `versions.json` | ✅ |
+| Release `0.1.0` published with `main.js` + `manifest.json` + `styles.css` | ✅ |
+| Directory submission | ⬜ **you** |
 
-```json
-{
-  "author": "Bartolomeo Zisa",
-  "authorUrl": "https://github.com/BartolomeoZisa"
-}
-```
+---
 
-`id` (`slide-autosummarize`) is permanent once published — don't change it later.
+## 1. Before you submit (already done — verify only)
 
-## 2. Create the GitHub repo
-
-> Already done: the repo is live at
-> <https://github.com/BartolomeoZisa/obsidian-slide-autosummarize>.
-> Skip to step 3.
+The directory reads the `manifest.json` **at the head of your default branch**, not the
+release. Make sure it is committed and pushed:
 
 ```bash
 cd obsidian-slide-autosummarize
-git init
-git add .
-git commit -m "Initial commit"
+git status          # must be clean
+git log --oneline -1
+git push origin main
 ```
 
-Create an **empty public** repo on GitHub named `obsidian-slide-autosummarize`
-(no README/license — you already have them), then:
-
-```bash
-git remote add origin https://github.com/BartolomeoZisa/obsidian-slide-autosummarize.git
-git push -u origin main
-```
-
-Make sure `main.js` **is** committed for releases — it is intentionally not in
-`.gitignore`. The release workflow also rebuilds it, so the attached asset always
-matches the tagged source.
-
-## 3. Cut a release
-
-```bash
-npm version 0.1.0        # or: npm version patch
-git push --follow-tags
-```
-
-`version-bump.mjs` syncs `manifest.json`, `package.json` and `versions.json`.
-The `release.yml` workflow then builds the plugin and creates a **draft** release
-with `main.js`, `manifest.json`, `styles.css` attached.
-
-**The draft must be published** — while it is a draft, the download URLs below
-return 404 and neither BRAT nor manual install can fetch the plugin.
-
-Go to **Releases → the draft → Edit → Publish release**.
-
-Verify all three resolve (HTTP 200):
+Check the release exists and all three assets download:
 
 ```bash
 BASE=https://github.com/BartolomeoZisa/obsidian-slide-autosummarize/releases/latest/download
@@ -71,47 +47,70 @@ for f in main.js manifest.json styles.css; do
 done
 ```
 
-## 4. Open the submission PR
+All three must print `200`. The release tag (`0.1.0`) must equal `version` in
+`manifest.json`.
 
-1. Fork <https://github.com/obsidianmd/obsidian-releases>.
-2. Edit `community-plugins.json` and append one object at the end of the array:
+## 2. Submit through the Community site
 
-   ```json
-   {
-     "id": "slide-autosummarize",
-     "name": "Slide Autosummarize",
-     "author": "Bartolomeo Zisa",
-     "description": "Auto-summarize PDF slide decks into study-ready Markdown class notes with LaTeX equations and LLM-picked figure crops.",
-     "repo": "BartolomeoZisa/obsidian-slide-autosummarize"
-   }
+1. Sign in at <https://community.obsidian.md> with your **Obsidian account**
+   (create one if needed — it is separate from GitHub).
+2. In your profile, **connect your GitHub account**. This lets the directory verify
+   you own the repo; read-only public profile access is enough.
+3. Go to the **Plugins** area → **New plugin** (or *Submit a plugin*).
+4. Paste the repository URL:
+
+   ```
+   https://github.com/BartolomeoZisa/obsidian-slide-autosummarize
    ```
 
-   Rules that trip people up:
-   - `id` must match `manifest.json` exactly.
-   - `description` must match `manifest.json` exactly (same punctuation), and must
-     not start with "This is a plugin…" or contain "Obsidian".
-   - No trailing comma; the file must stay valid JSON.
+5. Choose the owner (yourself) and complete the steps in the dashboard.
+6. Submit. Automated review starts immediately.
 
-3. Commit, push to your fork, open a PR titled **"Add plugin: Slide Autosummarize"**.
-4. The bot runs automated checks. Fix anything it flags; a human then reviews.
+## 3. Handle the review
 
-## 5. After acceptance
+The dashboard reports findings grouped into **Manifest**, **Releases**, **Source code**
+and **Build verification**, each as error / warning / recommendation / pass.
 
-The plugin appears in **Settings → Community plugins → Browse** within ~24h of the
-merge. Later updates: bump the version, push a tag, publish the release — the
-directory picks up new releases automatically. No new PR needed unless you change
-`id`, `author` or the repo.
+- **Errors** block publication — fix them, bump the version, publish a new release.
+- **Warnings** do not block, but they usually predict user-visible problems.
+
+To fix and resubmit:
+
+```bash
+npm version patch          # or minor/major
+git push --follow-tags     # triggers the release workflow -> draft release
+# publish the draft on GitHub, then re-run the scan from the dashboard
+```
+
+You can also run the same checks locally before submitting:
+
+```bash
+npm run build
+npx eslint --version >/dev/null 2>&1 || true   # optional: official Obsidian lint rules
+```
+
+The dashboard can also **preview-scan** any branch, tag or commit without releasing.
+
+## 4. After approval
+
+- The plugin appears in **Settings → Community plugins → Browse** within ~24 hours.
+- Announce it in the forums (*Share & showcase*) and on Discord (`#updates`, needs the
+  `developer` role).
+- Future updates: just bump the version and publish a GitHub release. New releases are
+  reviewed automatically; no resubmission needed.
 
 ---
 
-## Pre-submission checklist
+## Checklist
 
-- [ ] `manifest.json` has your real `author` / `authorUrl`
-- [ ] `id` is unique and lowercase-with-hyphens
-- [ ] `versions.json` contains the current version → `minAppVersion`
-- [ ] `main.js` is attached to the published release
-- [ ] Release is **published**, not draft
-- [ ] `README.md` explains install and use
-- [ ] `LICENSE` present (GPL-3.0-or-later — OSI-approved, accepted by the directory)
-- [ ] No API keys or secrets committed (`data.json` is not in the repo)
-- [ ] Plugin works with Restricted mode off in a clean vault
+- [x] `manifest.json` has real `author` / `authorUrl`
+- [x] `id` unique (`slide-autosummarize`), lowercase-with-hyphens, no "obsidian"
+- [x] `description` ≤ 250 chars, ends with a period, no emoji, no "This is a plugin"
+- [x] `versions.json` maps `0.1.0` → `minAppVersion`
+- [x] `main.js` attached to a **published** release (not draft)
+- [x] Release tag matches `manifest.json` version
+- [x] `README.md` explains install and use
+- [x] `LICENSE` present (GPL-3.0-or-later)
+- [x] No secrets committed (`data.json` is not in the repo)
+- [x] No Node.js/Electron APIs (so `isDesktopOnly: false` is correct)
+- [ ] Submitted via <https://community.obsidian.md>
