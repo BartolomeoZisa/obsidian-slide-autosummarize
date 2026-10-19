@@ -24,10 +24,15 @@ export interface PixelBox {
 }
 
 const MAX_FIGURES_PER_SLIDE = 5;
-const MIN_BOX_UNITS = 20; // in 0–1000 units
+const MIN_BOX_UNITS = 40; // in 0–1000 units; filters logos/bullets
 const QUAD_RE = /\[\s*(\d{1,4})\s*,\s*(\d{1,4})\s*,\s*(\d{1,4})\s*,\s*(\d{1,4})\s*\]/;
 const FIGURE_HINT_RE = /figur|bbox|crop|\bfig\b/i;
 const SLIDE_HEADING_RE = /^##\s+Slide\s+(\d+)/i;
+
+/** True when a line is a FIGURE directive (as opposed to prose). */
+function isFigureLine(line: string): boolean {
+	return FIGURE_HINT_RE.test(line) && QUAD_RE.test(line);
+}
 
 /** Extract FIGURE references from LLM markdown. Pure — safe to unit-test. */
 export function parseFigureReferences(markdown: string): FigureRef[] {
@@ -136,21 +141,30 @@ export async function cropPng(pngBytes: Uint8Array, box: PixelBox): Promise<Uint
 }
 
 /**
- * Replace FIGURE lines with embeds (or drop them when embed is "").
+ * Replace FIGURE lines with their rendered replacement (embed + caption),
+ * or delete them when the replacement is empty.
  * Pure — safe to unit-test.
  */
 export function applyFigureEmbeds(
 	markdown: string,
 	embeds: Map<number, string>,
-): string {	if (embeds.size === 0) return markdown;
+): string {
+	if (embeds.size === 0) return markdown;
 	const lines = markdown.split("\n");
-	return lines
-		.map((line, i) => {
-			if (!embeds.has(i)) return line;
-			const e = embeds.get(i) ?? "";
-			return e === "" ? "" : `\n${e}\n`;
-		})
-		.join("\n");
+	const out: string[] = [];
+	lines.forEach((line, i) => {
+		if (!embeds.has(i)) {
+			out.push(line);
+			return;
+		}
+		const replacement = (embeds.get(i) ?? "").trim();
+		if (replacement) {
+			out.push("");
+			out.push(replacement);
+			out.push("");
+		}
+	});
+	return out.join("\n").replace(/\n{3,}/g, "\n\n");
 }
 
 /**
@@ -160,6 +174,6 @@ export function applyFigureEmbeds(
 export function stripFigureLines(markdown: string): string {
 	return markdown
 		.split("\n")
-		.filter((line) => !(FIGURE_HINT_RE.test(line) && QUAD_RE.test(line)))
+		.filter((line) => !isFigureLine(line))
 		.join("\n");
 }

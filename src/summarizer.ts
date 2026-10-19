@@ -275,7 +275,11 @@ export async function summarizePdfFile(
 		const figCount = new Map<number, number>();
 		for (const ref of refs) {
 			const r = renders.get(ref.slide);
-			if (!r) continue;
+			if (!r) {
+				// Page had no render (text-only fallback): drop the directive.
+				embeds.set(ref.lineIndex, "");
+				continue;
+			}
 			let crop: Uint8Array;
 			try {
 				crop = await cropPng(r.bytes, boxToPixels(ref, r.width, r.height));
@@ -292,7 +296,8 @@ export async function summarizePdfFile(
 			const fname = `${base}-p${String(ref.slide).padStart(2, "0")}-fig${k}.png`;
 			const fpath = normalizePath(`${imgDir}/${fname}`);
 			await writeBinary(vault, fpath, crop);
-			embeds.set(ref.lineIndex, `![[${fpath}|${ref.caption}]]`);
+			const caption = ref.caption ? `\n*${ref.caption}*` : "";
+			embeds.set(ref.lineIndex, `![[${fpath}]]${caption}`);
 		}
 		body = applyFigureEmbeds(body, embeds);
 	} else {

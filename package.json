@@ -10,7 +10,7 @@
 	},
 	"type": "module",
 	"keywords": ["obsidian", "pdf", "summarize", "llm", "gemini", "ollama"],
-	"license": "MIT",
+	"license": "GPL-3.0-or-later",
 	"devDependencies": {
 		"@types/node": "^20.0.0",
 		"builtin-modules": "^5.0.0",

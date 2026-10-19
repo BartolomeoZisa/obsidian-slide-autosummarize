@@ -1,62 +1,234 @@
-# Slide Autosummarize — Obsidian plugin
+# Slide Autosummarize
 
-Auto-summarize a PDF slide deck into study-ready class notes:
-concise per-slide notes in LaTeX, plus only the relevant figures —
-picked by the LLM with bounding boxes, cropped and embedded.
+An Obsidian plugin that turns a PDF slide deck into **study-ready Markdown class notes**:
+concise notes per slide, LaTeX equations, and only the *relevant* figures — picked by
+the LLM with bounding boxes, cropped out of the slide, and embedded.
+
+Works with **Google Gemini** (default), **OpenAI**, **Anthropic Claude**, and **Ollama**
+(fully local). Providers are modular — see [Adding a provider](#adding-a-provider).
+
+---
+
+## Install
+
+### Option A — Community plugins (once accepted)
+
+1. Obsidian → **Settings → Community plugins → Browse**.
+2. Search **Slide Autosummarize** → **Install** → **Enable**.
+
+> The plugin is not in the directory yet. Until it is, use Option B or C.
+
+### Option B — Manual install (recommended for now)
+
+1. Download `main.js`, `manifest.json` and `styles.css` from the
+   [latest release](../../releases/latest).
+2. Put them in your vault:
+
+   ```
+   <your-vault>/.obsidian/plugins/slide-autosummarize/
+   ```
+
+   - **Windows:** `C:\Users\<you>\Documents\<vault>\.obsidian\plugins\slide-autosummarize\`
+   - **macOS:** `~/Documents/<vault>/.obsidian/plugins/slide-autosummarize/`
+   - **Linux:** `~/Documents/<vault>/.obsidian/plugins/slide-autosummarize/`
+
+   Create the folder if it does not exist. The three files must sit **directly** inside it.
+3. In Obsidian: **Settings → Community plugins** → turn off **Restricted mode** if needed →
+   click the refresh icon → enable **Slide Autosummarize**.
+4. If the plugin does not appear, restart Obsidian.
+
+### Option C — Build from source
+
+```bash
+git clone <this-repo>
+cd obsidian-slide-autosummarize
+npm install
+npm run build        # typecheck + production bundle -> main.js
+```
+
+Then copy `main.js`, `manifest.json`, `styles.css` into
+`<vault>/.obsidian/plugins/slide-autosummarize/` and enable the plugin.
+
+Development: `npm run dev` watch-builds `main.js` on save.
+
+---
+
+## Set up a provider
+
+Open **Settings → Slide Autosummarize** and pick a provider.
+
+### Google Gemini (default)
+
+1. Create a free API key at <https://aistudio.google.com/apikey>.
+2. Provider: **Google Gemini** → paste the key.
+3. Model: pick from the dropdown (`gemini-3.5-flash-lite` is the default) or choose
+   **Custom…** and type any model id.
+
+### OpenAI
+
+1. Provider: **OpenAI** → paste your `sk-…` key.
+2. Pick a model (`gpt-4o-mini`, `gpt-4o`, …) or **Custom…** for another id.
+
+### Anthropic Claude
+
+1. Provider: **Anthropic Claude** → paste your `sk-ant-…` key.
+2. Pick a model or **Custom…**.
+
+### Ollama (local, no API key)
+
+1. Install [Ollama](https://ollama.com) and pull a **vision** model, e.g.:
+
+   ```bash
+   ollama pull qwen2.5vl
+   ```
+
+   Other options: `llava`, `gemma3`. Text-only models work too — turn off
+   *Send slide images to the LLM* first.
+2. Provider: **Ollama (local)**, base URL `http://localhost:11434/v1`, model `qwen2.5vl`.
+3. No key needed.
+
+### Any other OpenAI-compatible endpoint
+
+Provider: **Custom OpenAI-compatible** → set the base URL
+(`http://host:port/v1`), an optional API key, and the model id.
+Works with vLLM, LM Studio, llama.cpp server, OpenRouter, Mistral, Together, …
+
+---
+
+## Use it
+
+1. Put a PDF in your vault.
+2. Open it, then either:
+   - press `Ctrl/Cmd+P` → **Slide Autosummarize: Summarize active PDF**, or
+   - right-click the PDF in the file explorer → **Summarize PDF slides**, or
+   - click the ✨ icon in the left ribbon while a PDF is open.
+3. Watch the progress notice. When it finishes, the note opens automatically.
+
+Output goes to **`Summaries/<pdf-name>.md`** by default, with figures in
+`Attachments/slides/<pdf-name>/`.
+
+### What the note contains
+
+```markdown
+---
+source-pdf: "[[lecture-03.pdf]]"
+generated: 2026-10-17T09:12:44.000Z
+provider: gemini
+model: gemini-3.5-flash-lite
+slides: 24
+---
+
+# lecture-03 — Slide Summary
+
+> Auto-generated class notes from `[[lecture-03.pdf]]` (24 slides) with Google Gemini
+> (`gemini-3.5-flash-lite`) on 2026-10-17.
+
+## Slide 1
+
+Notes for slide 1 …
+
+## Slide 2
+
+Notes, with math: the loss is $L(\theta) = -\sum_i \log p_\theta(y_i \mid x_i)$
+
+$$
+\nabla_\theta L = \mathbb{E}[\nabla_\theta \log p_\theta(y \mid x)]
+$$
+
+![[Attachments/slides/lecture-03/lecture-03-p02-fig1.png]]
+*attention pattern across heads*
+```
+
+- Notes are written like class notes, not slide descriptions.
+- Equations are real LaTeX (`$…$` inline, `$$…$$` display) and render in Reading view.
+- **Only relevant figures are embedded**, cropped to the figure itself. Full slides
+  are never embedded. Figures come from the LLM marking
+  `FIGURE [x1,y1,x2,y2] | caption` (0–1000 coordinates) and the plugin cropping
+  that region out of the page render.
+- Later batches receive the notes written so far, so terminology, notation and
+  definitions stay consistent across the whole deck.
+
+---
+
+## Settings reference
+
+| Setting | What it does |
+|---|---|
+| **LLM provider** | Gemini / OpenAI / Anthropic / Ollama / Custom. |
+| **Model** | Curated dropdown per provider, plus **Custom…** for any model id. |
+| **Output folder** | Where the Markdown notes go (default `Summaries`). |
+| **Image folder** | Where cropped figures (and optional full renders) are saved. |
+| **Send slide images to the LLM** | Multimodal input. Required for figure detection. Turn off for text-only models / to save tokens. |
+| **Embed relevant figures in the note** | Crop LLM-picked figures and embed them. Off = text-only note. |
+| **Keep full slide renders** | Also save every rendered slide PNG (not embedded). Off by default. |
+| **Slides per LLM call** | Batch size (default 3). Lower it if the model truncates output. |
+| **Render scale** | Resolution of rendered slides (default 2.0). Higher = sharper crops, more tokens. |
+| **Temperature** | On = omit the parameter and use the provider's own default. |
+| **Max tokens** | Response cap per batch. |
+| **Auto-retry on overload** | Retries per batch on 429/5xx/timeouts, exponential backoff honoring `Retry-After` (default 5, 0 = fail fast). |
+| **Extra instructions** | Appended to every prompt, e.g. *“Write in Italian, undergraduate level, focus on derivations.”* |
+| **Auto-summarize new PDFs** | Summarize every PDF added to the vault automatically. |
+
+---
+
+## Troubleshooting
+
+**“Could not start the PDF engine”** — the pdf.js worker is bundled inside `main.js`
+and loaded from a Blob URL; if Obsidian blocks that, the plugin retries via a pinned
+CDN copy, which needs internet. Check the developer console (`Ctrl+Shift+I`) for the
+underlying error.
+
+**HTTP 503 / “model is experiencing high demand”** — transient. The plugin retries
+automatically with backoff; raise *Auto-retry on overload* if your deck is long.
+Switch models if it persists.
+
+**Empty or truncated notes** — lower *Slides per LLM call* (e.g. 1–2) and raise
+*Max tokens*.
+
+**No figures in the note** — figures require *Send slide images to the LLM* **and**
+*Embed relevant figures*. Text-only models cannot detect figures.
+
+**Wrong crop regions** — the model returned bad coordinates. Lower *Slides per LLM
+call* (fewer slides per request = better spatial attention) or use a stronger
+vision model.
+
+**Wrong model id** — use **Custom…** and paste the exact id from the provider's docs.
+
+---
 
 ## How it works
 
-1. Right-click a PDF (or run **Summarize active PDF**) → plugin reads the binary from the vault.
-2. `src/pdf.ts` extracts text per page with pdf.js and renders each page to PNG (best-effort; falls back to text-only).
-3. `src/summarizer.ts` batches slides (default 3/call) and sends text + images to the configured LLM. Each batch also receives the **previously written notes** as context (`buildPriorNotesSection`), so terminology and notation stay consistent across the deck.
-4. The model writes class notes plus `FIGURE [x1,y1,x2,y2] | caption` lines for relevant pictures only. `src/figures.ts` parses them, crops the regions from the slide renders, and embeds just the crops (`![[…-figN.png|caption]]`). Full slides are never embedded.
-5. The note is written to `<outputFolder>/<pdf-name>.md` with frontmatter and per-slide sections.
+1. `src/pdf.ts` — extracts text per page with pdf.js and renders each page to PNG.
+   If rendering fails, the plugin continues text-only.
+2. `src/summarizer.ts` — batches slides, sends text + images + prior notes to the
+   provider, then assembles and writes the Markdown note.
+3. `src/figures.ts` — parses `FIGURE` lines, converts 0–1000 boxes to pixels,
+   crops the PNGs, and swaps the directives for embeds.
+4. `src/llm/` — one file per API behind a single `LLMProvider` interface.
 
-## Modular LLM providers
+### Adding a provider
 
-One interface, one file per API — see `src/llm/`:
-
-| File | Provider |
-|---|---|
-| `types.ts` | `LLMProvider` interface + shared fetch helpers |
-| `prompt.ts` | shared system/batch prompts (LaTeX + per-slide rules) |
-| `gemini.ts` | Google Gemini (Generative Language REST, no SDK) — **default, try first** |
-| `openai-compatible.ts` | OpenAI + Ollama (local) + any `/v1/chat/completions` endpoint |
-| `anthropic.ts` | Anthropic Messages API |
-| `factory.ts` | **registry** — add your provider here to wire it into settings + pipeline |
-
-To add a new API (e.g. Mistral, Cohere, local llama.cpp server):
-
-1. Create `src/llm/my-provider.ts` implementing `LLMProvider` (`summarizeSlides`).
+1. Create `src/llm/my-provider.ts` implementing `LLMProvider`
+   (`summarizeSlides`, `validateConfig`, `defaultModels`).
 2. Register it in `src/llm/factory.ts` (`allProviders()` + `ProviderId`).
-3. Add its key/model fields to `SummarizerSettings` and the settings tab. Done.
+3. Add its settings fields to `SummarizerSettings` (`src/summarizer.ts`) and the
+   settings tab (`src/settings.ts`).
 
-## Try it first with Gemini
+## Privacy
 
-1. Get a key at https://aistudio.google.com/apikey
-2. Settings → Slide Autosummarize → provider **Google Gemini** → paste key, model `gemini-3.5-flash-lite` (default; the dropdown also offers `gemma-4-31b-it` and friends, plus Custom for any other id).
-3. Open any PDF in the vault → `Ctrl/Cmd+P` → **Summarize active PDF**.
+The PDF is processed locally. Slide text and rendered page images are sent **only**
+to the provider you configure (or to your own Ollama server). API keys are stored in
+the plugin's `data.json` inside your vault — use a restricted key.
 
-## Ollama (local)
+## License
 
-1. `ollama pull qwen2.5vl` (or `llava`, `gemma3` — needs a vision model for slide images; otherwise disable *Send slide images*).
-2. Settings → provider **Ollama (local)**, base URL `http://localhost:11434/v1`, model `qwen2.5vl`.
-3. Run the same command. No API key needed.
+GPL-3.0-or-later — see [LICENSE](LICENSE).
 
-## Develop
+This program is free software: you can redistribute it and/or modify it under the
+terms of the GNU General Public License as published by the Free Software Foundation,
+either version 3 of the License, or (at your option) any later version. If you
+distribute a modified version, you must make the source available under the same
+license.
 
-```bash
-npm install
-npm run dev      # watch-build to main.js
-npm run build    # typecheck + production bundle
-```
-
-Copy `main.js`, `manifest.json`, `styles.css` into
-`<vault>/.obsidian/plugins/slide-autosummarize/` and enable in
-Settings → Community plugins.
-
-## Notes
-
-- Output keeps valid LaTeX (`$…$` inline, `$$…$$` display) so MathJax renders in Obsidian/Obsidian Publish.
-- Figure embeds are cropped PNGs with the LLM's caption — delete any that aren't relevant, or turn off *Embed relevant figures* for text-only notes.
-- Large decks: lower *Slides per LLM call* if the model truncates; raise *Render scale* for denser slides (sharper crops, more tokens).
+Third-party components keep their own licenses: `pdfjs-dist` (Apache-2.0) is bundled
+into `main.js`.

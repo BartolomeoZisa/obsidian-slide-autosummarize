@@ -3,9 +3,8 @@
 	"name": "Slide Autosummarize",
 	"version": "0.1.0",
 	"minAppVersion": "0.15.0",
-	"description": "Auto-summarize PDF slide decks with LLMs into per-slide Markdown notes with LaTeX equations and slide images. Modular providers: Gemini, OpenAI, Anthropic, Ollama.",
-	"author": "you",
-	"authorUrl": "",
-	"fundingUrl": "",
+	"description": "Auto-summarize PDF slide decks into study-ready Markdown class notes with LaTeX equations and LLM-picked figure crops. Providers: Gemini, OpenAI, Anthropic, Ollama.",
+	"author": "Bartolomeo Zisa",
+	"authorUrl": "https://github.com/BartolomeoZisa",
 	"isDesktopOnly": false
 }
