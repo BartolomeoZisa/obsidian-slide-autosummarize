@@ -275,7 +275,7 @@ the plugin's `data.json` inside your vault — use a restricted key.
 
 ## License
 
-GPL-3.0-or-later — see [LICENSE](LICENSE).
+GPL-3.0-or-later — see [LICENSE](LICENSE); copyright notice in [NOTICE](NOTICE).
 
 This program is free software: you can redistribute it and/or modify it under the
 terms of the GNU General Public License as published by the Free Software Foundation,
