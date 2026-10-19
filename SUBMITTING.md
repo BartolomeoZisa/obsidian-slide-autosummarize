@@ -21,7 +21,7 @@ takes a few minutes.
 | `LICENSE` (GPL-3.0-or-later) | ✅ |
 | `manifest.json` (author, authorUrl, description ≤ 250 chars, period) | ✅ |
 | `versions.json` | ✅ |
-| Release `0.1.0` published with `main.js` + `manifest.json` + `styles.css` | ✅ |
+| Release `0.1.1` published with `main.js` + `manifest.json` + `styles.css` | ✅ |
 | Directory submission | ⬜ **you** |
 
 ---
@@ -47,7 +47,7 @@ for f in main.js manifest.json styles.css; do
 done
 ```
 
-All three must print `200`. The release tag (`0.1.0`) must equal `version` in
+All three must print `200`. The release tag (`0.1.1`) must equal `version` in
 `manifest.json`.
 
 ## 2. Submit through the Community site
@@ -106,7 +106,7 @@ The dashboard can also **preview-scan** any branch, tag or commit without releas
 - [x] `manifest.json` has real `author` / `authorUrl`
 - [x] `id` unique (`slide-autosummarize`), lowercase-with-hyphens, no "obsidian"
 - [x] `description` ≤ 250 chars, ends with a period, no emoji, no "This is a plugin"
-- [x] `versions.json` maps `0.1.0` → `minAppVersion`
+- [x] `versions.json` maps `0.1.1` → `minAppVersion`
 - [x] `main.js` attached to a **published** release (not draft)
 - [x] Release tag matches `manifest.json` version
 - [x] `README.md` explains install and use
