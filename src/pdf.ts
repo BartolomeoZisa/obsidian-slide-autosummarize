@@ -23,34 +23,18 @@ export interface ExtractOptions {
 	onProgress?: (done: number, total: number) => void;
 }
 
-/** Keep in sync with the installed pdfjs-dist version (CDN fallback only). */
-const PDFJS_VERSION = "4.10.38";
-const CDN_WORKER_URLS = [
-	`https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VERSION}/build/pdf.worker.min.mjs`,
-	`https://unpkg.com/pdfjs-dist@${PDFJS_VERSION}/build/pdf.worker.min.mjs`,
-];
-
 async function loadPdfjs(): Promise<typeof import("pdfjs-dist")> {
 	// Lazy so a broken pdf.js install only fails when actually summarizing.
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	const pdfjs: any = await import("pdfjs-dist/legacy/build/pdf.mjs");
 
 	if (!pdfjs.GlobalWorkerOptions.workerSrc) {
-		try {
-			// Preferred: worker bundled as text inside main.js → Blob URL.
-			// Fully offline, no extra file to install next to the plugin.
-			const workerCode = (await import("pdfjs-dist/build/pdf.worker.min.mjs"))
-				.default as string;
-			const blob = new Blob([workerCode], { type: "text/javascript" });
-			pdfjs.GlobalWorkerOptions.workerSrc = URL.createObjectURL(blob);
-		} catch (e) {
-			// Fallback: pinned CDN (needs internet, same version as bundled).
-			console.warn(
-				"slide-autosummarize: bundled pdf.js worker unavailable, using CDN",
-				e,
-			);
-			pdfjs.GlobalWorkerOptions.workerSrc = CDN_WORKER_URLS[0];
-		}
+		// Worker is bundled as text inside main.js → Blob URL. Fully offline:
+		// no extra file to install and no remote code is ever downloaded.
+		const workerCode = (await import("pdfjs-dist/build/pdf.worker.min.mjs"))
+			.default as string;
+		const blob = new Blob([workerCode], { type: "text/javascript" });
+		pdfjs.GlobalWorkerOptions.workerSrc = URL.createObjectURL(blob);
 	}
 	return pdfjs;
 }
@@ -71,27 +55,12 @@ export async function extractPdfSlides(
 	try {
 		pdf = await openDocument(pdfjs, data);
 	} catch (e) {
-		// If the bundled (Blob) worker is blocked, retry once via CDN.
-		if (
-			isWorkerError(e) &&
-			typeof pdfjs.GlobalWorkerOptions.workerSrc === "string" &&
-			pdfjs.GlobalWorkerOptions.workerSrc.startsWith("blob:")
-		) {
-			console.warn(
-				"slide-autosummarize: blob worker failed, retrying via CDN",
-				e,
+		if (isWorkerError(e)) {
+			throw new Error(
+				`Could not start the PDF engine. ${workerHelp()} (${describe(e)})`,
 			);
-			pdfjs.GlobalWorkerOptions.workerSrc = CDN_WORKER_URLS[0];
-			try {
-				pdf = await openDocument(pdfjs, data);
-			} catch (e2) {
-				throw new Error(
-					`Could not start the PDF engine. ${workerHelp()} (${describe(e2)})`,
-				);
-			}
-		} else {
-			throw e;
 		}
+		throw e;
 	}
 	const totalRequested = opts.maxPages
 		? Math.min(opts.maxPages, pdf.numPages)
@@ -181,7 +150,7 @@ function describe(e: unknown): string {
 }
 
 function workerHelp(): string {
-	return "Check Settings → Slide Autosummarize: if you are offline the PDF engine cannot load its worker from CDN either.";
+	return "The PDF engine's worker is bundled with the plugin; check the developer console (Ctrl+Shift+I) for the underlying error, and make sure Obsidian is not blocking Blob URLs.";
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -1,4 +1,4 @@
-import { Notice, TFile, Vault, normalizePath } from "obsidian";
+import { TFile, Vault, normalizePath } from "obsidian";
 import { bytesToBase64, extractPdfSlides, ExtractedPage } from "./pdf";
 import { getProvider, ProviderId } from "./llm/factory";
 import { DEFAULT_GEMINI_MODEL } from "./llm/gemini";
@@ -336,7 +336,14 @@ export async function summarizePdfFile(
 	const outDir = normalizePath(settings.outputFolder);
 	await ensureFolder(vault, outDir);
 	const outPath = normalizePath(`${outDir}/${base}.md`);
-	await vault.adapter.write(outPath, note);
+	// Use the vault API (not vault.adapter) so the file is indexed and can be
+	// opened immediately after creation.
+	const existingNote = vault.getAbstractFileByPath(outPath);
+	if (existingNote instanceof TFile) {
+		await vault.modify(existingNote, note);
+	} else {
+		await vault.create(outPath, note);
+	}
 	onProgress?.({ phase: "write", done: 1, total: 1, label: "Done" });
 	return outPath;
 }
@@ -344,8 +351,13 @@ export async function summarizePdfFile(
 async function ensureFolder(vault: Vault, dir: string): Promise<void> {
 	const norm = normalizePath(dir);
 	if (!norm || norm === "/") return;
-	const exists = await vault.adapter.exists(norm);
-	if (!exists) await vault.createFolder(norm);
+	if (vault.getAbstractFileByPath(norm)) return;
+	try {
+		await vault.createFolder(norm);
+	} catch (e) {
+		// Folder may have been created concurrently; ignore only that case.
+		if (!vault.getAbstractFileByPath(norm)) throw e;
+	}
 }
 
 async function writeBinary(
@@ -356,15 +368,10 @@ async function writeBinary(
 	const existing = vault.getAbstractFileByPath(path);
 	if (existing instanceof TFile) {
 		await vault.modifyBinary(existing, bytes.buffer as ArrayBuffer);
-	} else {
-		if (await vault.adapter.exists(path)) await vault.adapter.remove(path);
-		await vault.createBinary(path, bytes.buffer as ArrayBuffer);
+		return;
 	}
-}
-
-export function notifyProgress(p: SummarizeProgress): void {
-	// lightweight; main.ts shows richer status via Notice + status bar
-	if (p.phase === "summarize" || p.phase === "extract") {
-		new Notice(`${p.label}`, 3000);
-	}
+	// Leftover non-indexed file (e.g. from an older version): remove it first
+	// so createBinary does not fail on a path that exists on disk.
+	if (await vault.adapter.exists(path)) await vault.adapter.remove(path);
+	await vault.createBinary(path, bytes.buffer as ArrayBuffer);
 }

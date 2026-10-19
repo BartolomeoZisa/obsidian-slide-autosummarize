@@ -9,12 +9,19 @@
 		"version": "node version-bump.mjs"
 	},
 	"type": "module",
-	"keywords": ["obsidian", "pdf", "summarize", "llm", "gemini", "ollama"],
+	"keywords": [
+		"obsidian",
+		"pdf",
+		"summarize",
+		"llm",
+		"gemini",
+		"ollama"
+	],
 	"license": "GPL-3.0-or-later",
 	"devDependencies": {
 		"@types/node": "^20.0.0",
 		"builtin-modules": "^5.0.0",
-		"esbuild": "^0.21.0",
+		"esbuild": "^0.28.2",
 		"obsidian": "latest",
 		"tslib": "^2.6.0",
 		"typescript": "^5.0.0"

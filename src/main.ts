@@ -79,7 +79,9 @@ export default class SlideAutosummarizePlugin extends Plugin {
 					file.extension.toLowerCase() === "pdf"
 				) {
 					// small delay so the binary is fully flushed to disk
-					setTimeout(() => void this.runForFile(file), 1500);
+					this.registerInterval(
+						window.setTimeout(() => void this.runForFile(file), 1500),
+					);
 				}
 			}),
 		);
@@ -117,7 +119,7 @@ export default class SlideAutosummarizePlugin extends Plugin {
 				},
 			);
 			notice.setMessage(`Done → ${outPath}`);
-			setTimeout(() => notice.hide(), 5000);
+			this.registerInterval(window.setTimeout(() => notice.hide(), 5000));
 			const out = this.app.vault.getAbstractFileByPath(outPath);
 			if (out instanceof TFile) {
 				await this.app.workspace.getLeaf(false).openFile(out);

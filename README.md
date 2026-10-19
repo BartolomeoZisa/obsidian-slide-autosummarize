@@ -16,7 +16,8 @@ Works with **Google Gemini** (default), **OpenAI**, **Anthropic Claude**, and **
 1. Obsidian → **Settings → Community plugins → Browse**.
 2. Search **Slide Autosummarize** → **Install** → **Enable**.
 
-> The plugin is not in the directory yet. Until it is, use one of the options below.
+> Not in the directory yet (submission in progress). Until then, use one of the options below.
+> You can follow the listing at <https://community.obsidian.md/plugins>.
 
 ### Option B — BRAT (easiest from GitHub, auto-updates)
 
@@ -225,9 +226,8 @@ $$
 ## Troubleshooting
 
 **“Could not start the PDF engine”** — the pdf.js worker is bundled inside `main.js`
-and loaded from a Blob URL; if Obsidian blocks that, the plugin retries via a pinned
-CDN copy, which needs internet. Check the developer console (`Ctrl+Shift+I`) for the
-underlying error.
+and loaded from a Blob URL, so no network access is needed. If you see this, check the
+developer console (`Ctrl+Shift+I`) for the underlying error.
 
 **HTTP 503 / “model is experiencing high demand”** — transient. The plugin retries
 automatically with backoff; raise *Auto-retry on overload* if your deck is long.
