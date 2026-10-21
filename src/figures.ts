@@ -1,3 +1,5 @@
+import type { TextBox } from "./pdf";
+
 /**
  * Figure pipeline: the LLM marks relevant pictures with FIGURE lines
  * carrying 0–1000 bounding boxes; we crop those regions from the slide
@@ -22,6 +24,7 @@ export interface PixelBox {
 	px2: number;
 	py2: number;
 }
+
 
 const MAX_FIGURES_PER_SLIDE = 5;
 const MIN_BOX_UNITS = 40; // in 0–1000 units; filters logos/bullets
@@ -103,6 +106,68 @@ export function boxToPixels(
 		px2: Math.min(width, Math.ceil((box.x2 / 1000) * width + padX)),
 		py2: Math.min(height, Math.ceil((box.y2 / 1000) * height + padY)),
 	};
+}
+
+/** How much a crop may grow to swallow clipped text before we give up. */
+const MAX_CROP_GROWTH = 3;
+
+/**
+ * Grow a crop box until every text run it touches is fully inside it, so no
+ * line is sliced in half. Returns null when that would make the crop too
+ * large — the caller then drops the figure entirely ("all of it or none").
+ */
+export function fitCropAroundText(
+	box: PixelBox,
+	textBoxes: TextBox[],
+	width: number,
+	height: number,
+): PixelBox | null {
+	const cur = { ...box };
+	const area = (b: PixelBox) => Math.max(1, (b.px2 - b.px1) * (b.py2 - b.py1));
+	const originalArea = area(box);
+	// Clamp text runs to the page so sub-pixel overflow does not force a drop.
+	const texts = textBoxes
+		.map((t) => ({
+			x1: Math.max(0, t.x1),
+			y1: Math.max(0, t.y1),
+			x2: Math.min(width, t.x2),
+			y2: Math.min(height, t.y2),
+		}))
+		.filter((t) => t.x2 > t.x1 && t.y2 > t.y1);
+
+	for (let pass = 0; pass < 8; pass++) {
+		let changed = false;
+		for (const t of texts) {
+			const touches =
+				t.x2 > cur.px1 && t.x1 < cur.px2 && t.y2 > cur.py1 && t.y1 < cur.py2;
+			if (!touches) continue;
+			const inside =
+				t.x1 >= cur.px1 && t.x2 <= cur.px2 && t.y1 >= cur.py1 && t.y2 <= cur.py2;
+			if (inside) continue;
+			cur.px1 = Math.max(0, Math.min(cur.px1, Math.floor(t.x1)));
+			cur.py1 = Math.max(0, Math.min(cur.py1, Math.floor(t.y1)));
+			cur.px2 = Math.min(width, Math.max(cur.px2, Math.ceil(t.x2)));
+			cur.py2 = Math.min(height, Math.max(cur.py2, Math.ceil(t.y2)));
+			changed = true;
+		}
+		if (!changed) break;
+	}
+
+	if (area(cur) > originalArea * MAX_CROP_GROWTH) return null;
+
+	// Anything still touching the box must be entirely inside it.
+	for (const t of texts) {
+		const touches =
+			t.x2 > cur.px1 && t.x1 < cur.px2 && t.y2 > cur.py1 && t.y1 < cur.py2;
+		if (!touches) continue;
+		const inside =
+			t.x1 >= cur.px1 - 0.5 &&
+			t.x2 <= cur.px2 + 0.5 &&
+			t.y1 >= cur.py1 - 0.5 &&
+			t.y2 <= cur.py2 + 0.5;
+		if (!inside) return null;
+	}
+	return cur;
 }
 
 function loadImage(url: string): Promise<HTMLImageElement> {

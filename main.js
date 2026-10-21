@@ -25928,9 +25928,17 @@ async function extractPdfSlides(data, opts = {}) {
   for (let n = 1; n <= totalRequested; n++) {
     const page = await pdf.getPage(n);
     let text = "";
+    let textBoxes = [];
     try {
       const tc = await page.getTextContent();
       text = tc.items.map((it) => "str" in it ? it.str : "").join(" ").replace(/\s+/g, " ").trim();
+      if (renderImages) {
+        textBoxes = collectTextBoxes(
+          tc.items,
+          page.getViewport({ scale: renderScale }),
+          renderScale
+        );
+      }
     } catch (e) {
       console.warn(`slide-autosummarize: text extraction failed p.${n}`, e);
     }
@@ -25950,7 +25958,8 @@ async function extractPdfSlides(data, opts = {}) {
       text,
       imageBytes: rendered == null ? void 0 : rendered.bytes,
       imageWidth: rendered == null ? void 0 : rendered.width,
-      imageHeight: rendered == null ? void 0 : rendered.height
+      imageHeight: rendered == null ? void 0 : rendered.height,
+      textBoxes
     });
     try {
       page.cleanup();
@@ -25963,6 +25972,37 @@ async function extractPdfSlides(data, opts = {}) {
   } catch (e) {
   }
   return { pages, numPages: pdf.numPages };
+}
+function collectTextBoxes(items, viewport, scale) {
+  const boxes = [];
+  for (const raw of items) {
+    if (typeof raw !== "object" || raw === null) continue;
+    const item = raw;
+    if (typeof item.str !== "string" || !item.str.trim()) continue;
+    if (!Array.isArray(item.transform)) continue;
+    const transform = item.transform.map((v) => Number(v));
+    if (transform.length < 6 || transform.some((v) => !Number.isFinite(v))) {
+      continue;
+    }
+    const tx = multiply(viewport.transform, transform);
+    const fontHeight = Math.hypot(tx[2], tx[3]);
+    const width = (typeof item.width === "number" ? item.width : 0) * scale;
+    if (!(width > 0.5) || !(fontHeight > 0.5)) continue;
+    const left = tx[4];
+    const top = tx[5] - fontHeight;
+    boxes.push({ x1: left, y1: top, x2: left + width, y2: top + fontHeight });
+  }
+  return boxes;
+}
+function multiply(m1, m2) {
+  return [
+    m1[0] * m2[0] + m1[2] * m2[1],
+    m1[1] * m2[0] + m1[3] * m2[1],
+    m1[0] * m2[2] + m1[2] * m2[3],
+    m1[1] * m2[2] + m1[3] * m2[3],
+    m1[0] * m2[4] + m1[2] * m2[5] + m1[4],
+    m1[1] * m2[4] + m1[3] * m2[5] + m1[5]
+  ];
 }
 function openDocument(pdfjs, data) {
   const loadingTask = pdfjs.getDocument({
@@ -26213,6 +26253,41 @@ function boxToPixels(box, width, height, padFrac = 0.02) {
     py2: Math.min(height, Math.ceil(box.y2 / 1e3 * height + padY))
   };
 }
+var MAX_CROP_GROWTH = 3;
+function fitCropAroundText(box, textBoxes, width, height) {
+  const cur = { ...box };
+  const area = (b) => Math.max(1, (b.px2 - b.px1) * (b.py2 - b.py1));
+  const originalArea = area(box);
+  const texts = textBoxes.map((t) => ({
+    x1: Math.max(0, t.x1),
+    y1: Math.max(0, t.y1),
+    x2: Math.min(width, t.x2),
+    y2: Math.min(height, t.y2)
+  })).filter((t) => t.x2 > t.x1 && t.y2 > t.y1);
+  for (let pass = 0; pass < 8; pass++) {
+    let changed = false;
+    for (const t of texts) {
+      const touches = t.x2 > cur.px1 && t.x1 < cur.px2 && t.y2 > cur.py1 && t.y1 < cur.py2;
+      if (!touches) continue;
+      const inside = t.x1 >= cur.px1 && t.x2 <= cur.px2 && t.y1 >= cur.py1 && t.y2 <= cur.py2;
+      if (inside) continue;
+      cur.px1 = Math.max(0, Math.min(cur.px1, Math.floor(t.x1)));
+      cur.py1 = Math.max(0, Math.min(cur.py1, Math.floor(t.y1)));
+      cur.px2 = Math.min(width, Math.max(cur.px2, Math.ceil(t.x2)));
+      cur.py2 = Math.min(height, Math.max(cur.py2, Math.ceil(t.y2)));
+      changed = true;
+    }
+    if (!changed) break;
+  }
+  if (area(cur) > originalArea * MAX_CROP_GROWTH) return null;
+  for (const t of texts) {
+    const touches = t.x2 > cur.px1 && t.x1 < cur.px2 && t.y2 > cur.py1 && t.y1 < cur.py2;
+    if (!touches) continue;
+    const inside = t.x1 >= cur.px1 - 0.5 && t.x2 <= cur.px2 + 0.5 && t.y1 >= cur.py1 - 0.5 && t.y2 <= cur.py2 + 0.5;
+    if (!inside) return null;
+  }
+  return cur;
+}
 function loadImage(url) {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -26274,7 +26349,7 @@ function buildBatchPrompt(startPage, endPage, customInstructions = "") {
   return `Take class notes for PDF slides (pages ${startPage}\u2013${endPage}). For EACH slide output exactly:
 
 ## Slide <N>
-<concise notes: the substance a student must remember \u2014 definitions, results, derivations, key formulas. Short bullets or tight paragraphs. Formulas in LaTeX: inline $...$, display $$...$$ on their own lines. Skip filler; if a slide is only a title, agenda or section divider, say so in one line.>
+<concise notes: the substance a student must remember \u2014 definitions, results, derivations, key formulas. Short bullets or tight paragraphs. Formulas in LaTeX: inline $...$, display $$...$$ on their own lines. Skip filler; if a slide is only a title, agenda or section divider, say so in one line. Where it genuinely helps understanding, add a short concrete example \u2014 a mini worked example, one numerical case, or a quick analogy \u2014 clearly introduced as an example. Keep it brief and skip it when the slide already contains one or when it would only restate the slide.>
 
 FIGURES (only for slides with pictures worth keeping in notes):
 For every RELEVANT figure \u2014 a diagram, chart, plot, photo, table or illustration that the notes would be worse without \u2014 output ONE line directly under the notes:
@@ -26282,6 +26357,8 @@ FIGURE [x1, y1, x2, y2] | short caption describing the figure
 
 Rules for FIGURE lines:
 - Coordinates are integers 0\u20131000 relative to the slide image, origin top-left. The box must tightly enclose the figure.
+- The box must include ALL text that belongs to the figure: labels, axis ticks and numbers, legend entries, in-figure titles and the figure caption. Never cut through a line of text.
+- If the figure cannot be enclosed without clipping its text (or would have to swallow unrelated slide text), omit it entirely \u2014 no FIGURE line. All of it or none of it.
 - Only real content figures. NEVER box plain text, bullet lists, titles, logos, page numbers or decorative backgrounds.
 - Most text-only slides have NO figures \u2014 then output no FIGURE line at all.
 - At most 5 FIGURE lines per slide.
@@ -26714,7 +26791,7 @@ function sanitizeBase(name) {
   return name.replace(/[\\/:*?"<>|#^[\]]/g, "_").trim() || "slides";
 }
 async function summarizePdfFile(vault, pdfFile, settings, onProgress) {
-  var _a2;
+  var _a2, _b;
   const { providerId, config } = providerConfigFor(settings);
   config.maxRetries = settings.maxRetries;
   const provider = getProvider(providerId);
@@ -26735,7 +26812,8 @@ async function summarizePdfFile(vault, pdfFile, settings, onProgress) {
       renders.set(p.pageNumber, {
         bytes: p.imageBytes,
         width: p.imageWidth,
-        height: p.imageHeight
+        height: p.imageHeight,
+        textBoxes: (_a2 = p.textBoxes) != null ? _a2 : []
       });
     }
   }
@@ -26814,9 +26892,19 @@ ${priorSection}`;
         embeds.set(ref.lineIndex, "");
         continue;
       }
+      const safe = fitCropAroundText(
+        boxToPixels(ref, r.width, r.height),
+        r.textBoxes,
+        r.width,
+        r.height
+      );
+      if (!safe) {
+        embeds.set(ref.lineIndex, "");
+        continue;
+      }
       let crop;
       try {
-        crop = await cropPng(r.bytes, boxToPixels(ref, r.width, r.height));
+        crop = await cropPng(r.bytes, safe);
       } catch (e) {
         console.warn(
           `slide-autosummarize: crop failed (slide ${ref.slide}), dropping figure`,
@@ -26825,7 +26913,7 @@ ${priorSection}`;
         embeds.set(ref.lineIndex, "");
         continue;
       }
-      const k = ((_a2 = figCount.get(ref.slide)) != null ? _a2 : 0) + 1;
+      const k = ((_b = figCount.get(ref.slide)) != null ? _b : 0) + 1;
       figCount.set(ref.slide, k);
       const fname = `${base}-p${String(ref.slide).padStart(2, "0")}-fig${k}.png`;
       const fpath = (0, import_obsidian2.normalizePath)(`${imgDir}/${fname}`);

@@ -1,5 +1,10 @@
 import { TFile, Vault, normalizePath } from "obsidian";
-import { bytesToBase64, extractPdfSlides, ExtractedPage } from "./pdf";
+import {
+	bytesToBase64,
+	extractPdfSlides,
+	ExtractedPage,
+	TextBox,
+} from "./pdf";
 import { getProvider, ProviderId } from "./llm/factory";
 import { DEFAULT_GEMINI_MODEL } from "./llm/gemini";
 import { ProviderConfig, SlideContent } from "./llm/types";
@@ -12,6 +17,7 @@ import {
 	applyFigureEmbeds,
 	boxToPixels,
 	cropPng,
+	fitCropAroundText,
 	parseFigureReferences,
 } from "./figures";
 
@@ -185,7 +191,12 @@ export async function summarizePdfFile(
 	const imgDir = normalizePath(`${settings.imageFolder}/${base}`);
 	const renders = new Map<
 		number,
-		{ bytes: Uint8Array; width: number; height: number }
+		{
+			bytes: Uint8Array;
+			width: number;
+			height: number;
+			textBoxes: TextBox[];
+		}
 	>();
 	for (const p of pages) {
 		if (p.imageBytes && p.imageWidth && p.imageHeight) {
@@ -193,6 +204,7 @@ export async function summarizePdfFile(
 				bytes: p.imageBytes,
 				width: p.imageWidth,
 				height: p.imageHeight,
+				textBoxes: p.textBoxes ?? [],
 			});
 		}
 	}
@@ -280,9 +292,21 @@ export async function summarizePdfFile(
 				embeds.set(ref.lineIndex, "");
 				continue;
 			}
+			// Grow the box to swallow any text it would otherwise slice.
+			// null means the figure cannot be taken cleanly: drop it.
+			const safe = fitCropAroundText(
+				boxToPixels(ref, r.width, r.height),
+				r.textBoxes,
+				r.width,
+				r.height,
+			);
+			if (!safe) {
+				embeds.set(ref.lineIndex, "");
+				continue;
+			}
 			let crop: Uint8Array;
 			try {
-				crop = await cropPng(r.bytes, boxToPixels(ref, r.width, r.height));
+				crop = await cropPng(r.bytes, safe);
 			} catch (e) {
 				console.warn(
 					`slide-autosummarize: crop failed (slide ${ref.slide}), dropping figure`,
