@@ -14,8 +14,10 @@ export function buildBatchPrompt(
 ): string {
 	return `Take class notes for PDF slides (pages ${startPage}–${endPage}). For EACH slide output exactly:
 
-## Slide <N>
+## <title> (<N>)
 <concise notes: the substance a student must remember — definitions, results, derivations, key formulas. Short bullets or tight paragraphs. Formulas in LaTeX: inline $...$, display $$...$$ on their own lines. Skip filler; if a slide is only a title, agenda or section divider, say so in one line. Where it genuinely helps understanding, add a short concrete example — a mini worked example, one numerical case, or a quick analogy — clearly introduced as an example. Keep it brief and skip it when the slide already contains one or when it would only restate the slide.>
+
+<title> must be a meaningful title taken from the slide itself — its own heading, or a short accurate phrase drawn from its content. Never use a generic "Slide <N>" as the title. <N> is the slide's page number, in parentheses, e.g. "## The Chain Rule (12)".
 
 FIGURES (only for slides with pictures worth keeping in notes):
 For every RELEVANT figure — a diagram, chart, plot, photo, table or illustration that the notes would be worse without — output ONE line directly under the notes:
@@ -25,6 +27,7 @@ Rules for FIGURE lines:
 - Coordinates are integers 0–1000 relative to the slide image, origin top-left. The box must tightly enclose the figure.
 - The box must include ALL text that belongs to the figure: labels, axis ticks and numbers, legend entries, in-figure titles and the figure caption. Never cut through a line of text.
 - If the figure cannot be enclosed without clipping its text (or would have to swallow unrelated slide text), omit it entirely — no FIGURE line. All of it or none of it.
+- If the notes already reproduce the slide's content in full — for example a slide that is only an equation, which LaTeX captures exactly — do NOT output a FIGURE line for it. Keep a figure only when the picture itself carries information the text cannot: a diagram, plot, photo, chart or table.
 - Only real content figures. NEVER box plain text, bullet lists, titles, logos, page numbers or decorative backgrounds.
 - Most text-only slides have NO figures — then output no FIGURE line at all.
 - At most 5 FIGURE lines per slide.
@@ -33,7 +36,7 @@ General rules:
 - Cover every slide in the range, in order.
 - Preserve technical terms, symbols, theorem/definition names exactly.
 - LaTeX must be valid (never use Unicode math symbols in place of LaTeX commands).
-- Output ONLY the ## Slide sections (notes + FIGURE lines), no preamble, no postamble.
+- Output ONLY the ## <title> (<N>) sections (notes + FIGURE lines), no preamble, no postamble.
 - Do NOT invent content that is not on the slides; if a slide image is blurry, say so briefly and use the extracted text.
 ${customInstructions ? `\nAdditional instructions from the user:\n${customInstructions}\n` : ""}`.trim();
 }

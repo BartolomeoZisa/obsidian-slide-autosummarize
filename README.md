@@ -195,13 +195,17 @@ $$
 
 - Notes are written like class notes, not slide descriptions, and add a short
   worked example or analogy when it genuinely helps explain a concept.
+- Each slide is titled with its own heading taken from the slide, followed by the
+  page number — e.g. `## The Chain Rule (12)` — instead of a bare "Slide N".
 - Equations are real LaTeX (`$…$` inline, `$$…$$` display) and render in Reading view.
 - **Only relevant figures are embedded**, cropped to the figure itself. Full slides
   are never embedded. Figures come from the LLM marking
   `FIGURE [x1,y1,x2,y2] | caption` (0–1000 coordinates) and the plugin cropping
   that region out of the page render. Crops are text-safe: a box is widened to
   include any text run it would slice, and a figure that cannot be captured
-  without clipping text is skipped rather than embedded half-cut.
+  without clipping text is skipped rather than embedded half-cut. A slide whose
+  content LaTeX already reproduces in full (e.g. a formula-only slide) gets no
+  figure at all.
 - Later batches receive the notes written so far, so terminology, notation and
   definitions stay consistent across the whole deck.
 

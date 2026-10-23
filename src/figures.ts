@@ -30,7 +30,10 @@ const MAX_FIGURES_PER_SLIDE = 5;
 const MIN_BOX_UNITS = 40; // in 0–1000 units; filters logos/bullets
 const QUAD_RE = /\[\s*(\d{1,4})\s*,\s*(\d{1,4})\s*,\s*(\d{1,4})\s*,\s*(\d{1,4})\s*\]/;
 const FIGURE_HINT_RE = /figur|bbox|crop|\bfig\b/i;
-const SLIDE_HEADING_RE = /^##\s+Slide\s+(\d+)/i;
+// Primary heading is "## <title> (<N>)" (page number in trailing parens);
+// the legacy "## Slide <N>" form is kept as a fallback.
+const SLIDE_HEADING_RE = /^##\s+.+\((?:slide\s*)?(\d+)\)\s*$/i;
+const SLIDE_HEADING_LEGACY_RE = /^##\s+Slide\s+(\d+)/i;
 
 /** True when a line is a FIGURE directive (as opposed to prose). */
 function isFigureLine(line: string): boolean {
@@ -44,7 +47,7 @@ export function parseFigureReferences(markdown: string): FigureRef[] {
 	let slide = -1;
 	const perSlide = new Map<number, number>();
 	lines.forEach((line, lineIndex) => {
-		const hm = line.match(SLIDE_HEADING_RE);
+		const hm = line.match(SLIDE_HEADING_RE) ?? line.match(SLIDE_HEADING_LEGACY_RE);
 		if (hm) {
 			slide = parseInt(hm[1], 10);
 			return;

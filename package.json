@@ -1,6 +1,6 @@
 {
 	"name": "obsidian-slide-autosummarize",
-	"version": "0.1.4",
+	"version": "0.1.5",
 	"description": "Obsidian plugin: auto-summarize PDF slides to Markdown with LLMs (Gemini first, modular providers incl. Ollama)",
 	"main": "main.js",
 	"scripts": {

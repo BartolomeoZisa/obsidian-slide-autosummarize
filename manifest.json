@@ -1,7 +1,7 @@
 {
 	"id": "slide-autosummarize",
 	"name": "Slide Autosummarize",
-	"version": "0.1.4",
+	"version": "0.1.5",
 	"minAppVersion": "1.4.0",
 	"description": "Auto-summarize PDF slide decks into study-ready Markdown class notes with LaTeX equations and LLM-picked figure crops. Providers: Gemini, OpenAI, Anthropic, Ollama.",
 	"author": "Bartolomeo Zisa",

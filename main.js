@@ -26195,7 +26195,8 @@ var MAX_FIGURES_PER_SLIDE = 5;
 var MIN_BOX_UNITS = 40;
 var QUAD_RE = /\[\s*(\d{1,4})\s*,\s*(\d{1,4})\s*,\s*(\d{1,4})\s*,\s*(\d{1,4})\s*\]/;
 var FIGURE_HINT_RE = /figur|bbox|crop|\bfig\b/i;
-var SLIDE_HEADING_RE = /^##\s+Slide\s+(\d+)/i;
+var SLIDE_HEADING_RE = /^##\s+.+\((?:slide\s*)?(\d+)\)\s*$/i;
+var SLIDE_HEADING_LEGACY_RE = /^##\s+Slide\s+(\d+)/i;
 function isFigureLine(line) {
   return FIGURE_HINT_RE.test(line) && QUAD_RE.test(line);
 }
@@ -26205,8 +26206,8 @@ function parseFigureReferences(markdown) {
   let slide = -1;
   const perSlide = /* @__PURE__ */ new Map();
   lines.forEach((line, lineIndex) => {
-    var _a2;
-    const hm = line.match(SLIDE_HEADING_RE);
+    var _a2, _b;
+    const hm = (_a2 = line.match(SLIDE_HEADING_RE)) != null ? _a2 : line.match(SLIDE_HEADING_LEGACY_RE);
     if (hm) {
       slide = parseInt(hm[1], 10);
       return;
@@ -26221,7 +26222,7 @@ function parseFigureReferences(markdown) {
     const cy1 = clamp(Math.min(nums[1], nums[3]), 0, 1e3);
     const cy2 = clamp(Math.max(nums[1], nums[3]), 0, 1e3);
     if (cx2 - cx1 < MIN_BOX_UNITS || cy2 - cy1 < MIN_BOX_UNITS) return;
-    const count = (_a2 = perSlide.get(slide)) != null ? _a2 : 0;
+    const count = (_b = perSlide.get(slide)) != null ? _b : 0;
     if (count >= MAX_FIGURES_PER_SLIDE) return;
     perSlide.set(slide, count + 1);
     const after = line.slice(q.index + q[0].length).trim().replace(/^\|\s*/, "");
@@ -26348,8 +26349,10 @@ var DEFAULT_SYSTEM_PROMPT = `You are a student taking excellent class notes in O
 function buildBatchPrompt(startPage, endPage, customInstructions = "") {
   return `Take class notes for PDF slides (pages ${startPage}\u2013${endPage}). For EACH slide output exactly:
 
-## Slide <N>
+## <title> (<N>)
 <concise notes: the substance a student must remember \u2014 definitions, results, derivations, key formulas. Short bullets or tight paragraphs. Formulas in LaTeX: inline $...$, display $$...$$ on their own lines. Skip filler; if a slide is only a title, agenda or section divider, say so in one line. Where it genuinely helps understanding, add a short concrete example \u2014 a mini worked example, one numerical case, or a quick analogy \u2014 clearly introduced as an example. Keep it brief and skip it when the slide already contains one or when it would only restate the slide.>
+
+<title> must be a meaningful title taken from the slide itself \u2014 its own heading, or a short accurate phrase drawn from its content. Never use a generic "Slide <N>" as the title. <N> is the slide's page number, in parentheses, e.g. "## The Chain Rule (12)".
 
 FIGURES (only for slides with pictures worth keeping in notes):
 For every RELEVANT figure \u2014 a diagram, chart, plot, photo, table or illustration that the notes would be worse without \u2014 output ONE line directly under the notes:
@@ -26359,6 +26362,7 @@ Rules for FIGURE lines:
 - Coordinates are integers 0\u20131000 relative to the slide image, origin top-left. The box must tightly enclose the figure.
 - The box must include ALL text that belongs to the figure: labels, axis ticks and numbers, legend entries, in-figure titles and the figure caption. Never cut through a line of text.
 - If the figure cannot be enclosed without clipping its text (or would have to swallow unrelated slide text), omit it entirely \u2014 no FIGURE line. All of it or none of it.
+- If the notes already reproduce the slide's content in full \u2014 for example a slide that is only an equation, which LaTeX captures exactly \u2014 do NOT output a FIGURE line for it. Keep a figure only when the picture itself carries information the text cannot: a diagram, plot, photo, chart or table.
 - Only real content figures. NEVER box plain text, bullet lists, titles, logos, page numbers or decorative backgrounds.
 - Most text-only slides have NO figures \u2014 then output no FIGURE line at all.
 - At most 5 FIGURE lines per slide.
@@ -26367,7 +26371,7 @@ General rules:
 - Cover every slide in the range, in order.
 - Preserve technical terms, symbols, theorem/definition names exactly.
 - LaTeX must be valid (never use Unicode math symbols in place of LaTeX commands).
-- Output ONLY the ## Slide sections (notes + FIGURE lines), no preamble, no postamble.
+- Output ONLY the ## <title> (<N>) sections (notes + FIGURE lines), no preamble, no postamble.
 - Do NOT invent content that is not on the slides; if a slide image is blurry, say so briefly and use the extracted text.
 ${customInstructions ? `
 Additional instructions from the user:
